@@ -15,7 +15,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder='../frontend', static_url_path='/static')
-CORS(app, origins=["https://shiletto-shop.onrender.com", "http://localhost:8080", "http://127.0.0.1:8080"])
+# Разрешаем CORS для всех origins (временно для отладки)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 logger.info("=== FLASK APP STARTED ===")
 
@@ -223,29 +224,61 @@ def admin_required(f):
 @app.route('/api/auth/register', methods=['POST'])
 def register():
     logger.info("=== REGISTER ENDPOINT CALLED ===")
-    data = request.json
-    logger.info(f"Register data: {data}")
-    
-    if User.query.filter_by(email=data['email']).first():
-        logger.info(f"Email {data['email']} already registered")
-        return jsonify({'error': 'Email already registered'}), 400
-    
-    user = User(
-        username=data['username'],
-        email=data['email'],
-        password_hash=generate_password_hash(data['password'])
-    )
-    db.session.add(user)
-    db.session.commit()
-    
-    token = create_token(user.id)
-    logger.info(f"User registered successfully, id: {user.id}, token created")
-    return jsonify({'token': token, 'user_id': user.id}), 201
+    try:
+        data = request.json
+        logger.info(f"Register data: {data}")
+        
+        if not data or 'email' not in data or 'password' not in data or 'username' not in data:
+            logger.error("Missing required fields")
+            return jsonify({'error': 'Missing required fields: email, password, username'}), 400
+        
+        if User.query.filter_by(email=data['email']).first():
+            logger.info(f"Email {data['email']} already registered")
+            return jsonify({'error': 'Email already registered'}), 400
+        
+        user = User(
+            username=data['username'],
+            email=data['email'],
+            password_hash=generate_password_hash(data['password'])
+        )
+        db.session.add(user)
+        db.session.commit()
+        
+        token = create_token(user.id)
+        logger.info(f"User registered successfully, id: {user.id}, token created")
+        return jsonify({'token': token, 'user_id': user.id}), 201
+    except Exception as e:
+        logger.error(f"Register error: {str(e)}", exc_info=True)
+        db.session.rollback()
+        return jsonify({'error': f'Registration failed: {str(e)}'}), 500
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
-    data = request.json
-    user = User.query.filter_by(email=data['email']).first()
+    logger.info("=== LOGIN ENDPOINT CALLED ===")
+    try:
+        data = request.json
+        logger.info(f"Login attempt for email: {data.get('email') if data else 'None'}")
+        
+        if not data or 'email' not in data or 'password' not in data:
+            logger.error("Missing email or password")
+            return jsonify({'error': 'Missing email or password'}), 400
+        
+        user = User.query.filter_by(email=data['email']).first()
+        
+        if not user:
+            logger.warning(f"User not found: {data['email']}")
+            return jsonify({'error': 'Invalid credentials'}), 401
+        
+        if not check_password_hash(user.password_hash, data['password']):
+            logger.warning(f"Wrong password for user: {data['email']}")
+            return jsonify({'error': 'Invalid credentials'}), 401
+        
+        token = create_token(user.id)
+        logger.info(f"User logged in: {user.email}, is_admin: {user.is_admin}")
+        return jsonify({'token': token, 'is_admin': user.is_admin, 'user_id': user.id}), 200
+    except Exception as e:
+        logger.error(f"Login error: {str(e)}", exc_info=True)
+        return jsonify({'error': f'Login failed: {str(e)}'}), 500
     
     if not user or not check_password_hash(user.password_hash, data['password']):
         return jsonify({'error': 'Invalid credentials'}), 401
