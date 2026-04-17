@@ -1021,10 +1021,10 @@ def ensure_chat_message_is_read_column():
     _migration_checked = True
 
     try:
-        result = db.session.execute("PRAGMA table_info(chat_message)").fetchall()
+        result = db.session.execute(text("PRAGMA table_info(chat_message)")).fetchall()
         columns = [row[1] for row in result]
         if 'is_read' not in columns:
-            db.session.execute("ALTER TABLE chat_message ADD COLUMN is_read BOOLEAN NOT NULL DEFAULT 0")
+            db.session.execute(text("ALTER TABLE chat_message ADD COLUMN is_read BOOLEAN NOT NULL DEFAULT 0"))
             db.session.commit()
             app.logger.info('Добавлена колонка is_read для chat_message')
     except Exception as e:
