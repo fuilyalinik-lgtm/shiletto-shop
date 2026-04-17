@@ -1,4 +1,5 @@
-const API_BASE = 'http://localhost:8080/api';
+// Динамический базовый URL - автоматически подставляется текущий домен
+const API_BASE = `${window.location.origin}/api`;
 let authToken = localStorage.getItem('auth_token');
 
 async function apiRequest(endpoint, method = 'GET', data = null) {
