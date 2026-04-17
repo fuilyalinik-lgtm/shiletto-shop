@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder='../frontend', static_url_path='/static')
-CORS(app)
+CORS(app, origins=["https://shiletto-shop.onrender.com", "http://localhost:8080", "http://127.0.0.1:8080"])
 
 logger.info("=== FLASK APP STARTED ===")
 
@@ -1435,3 +1435,44 @@ if __name__ == '__main__':
             print("Админ создан: admin@example.com / admin123")
     
     app.run(debug=True, port=8080)
+
+# ===== МАРШРУТЫ ДЛЯ ФРОНТЕНДА =====
+@app.route('/')
+def index():
+    return send_from_directory('../frontend', 'index.html')
+
+@app.route('/about')
+def about():
+    return send_from_directory('../frontend', 'about.html')
+
+@app.route('/contact')
+def contact():
+    return send_from_directory('../frontend', 'contact.html')
+
+@app.route('/product')
+def product():
+    return send_from_directory('../frontend', 'product.html')
+
+@app.route('/checkout')
+def checkout():
+    return send_from_directory('../frontend', 'checkout.html')
+
+@app.route('/chat')
+def chat():
+    return send_from_directory('../frontend', 'chat.html')
+
+@app.route('/profile')
+def profile():
+    return send_from_directory('../frontend', 'profile.html')
+
+@app.route('/admin')
+def admin():
+    return send_from_directory('../frontend/admin', 'dashboard.html')
+
+@app.route('/admin/<path:filename>')
+def admin_files(filename):
+    return send_from_directory('../frontend/admin', filename)
+
+@app.route('/<path:filename>')
+def frontend_files(filename):
+    return send_from_directory('../frontend', filename)
