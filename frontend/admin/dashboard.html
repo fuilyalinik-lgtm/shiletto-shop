@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Адмін-панель</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+    <header>
+        <h1>Адмін-панель</h1>
+        <nav>
+            <button id="backToSiteBtn">На сайт</button>
+        </nav>
+    </header>
+
+    <div class="admin-container">
+        <aside class="sidebar">
+            <ul>
+                <li><a href="#" onclick="showSection('dashboard')">Панель управління</a></li>
+                <li><a href="#" onclick="showSection('banners')">Банери</a></li>
+                <li><a href="#" onclick="showSection('categories')">Категорії</a></li>
+                <li><a href="#" onclick="showSection('products')">Товари</a></li>
+            </ul>
+        </aside>
+
+        <main class="admin-content">
+            <!-- Dashboard -->
+            <section id="dashboard-section" class="admin-section">
+                <h2>Панель управління</h2>
+                <div class="stats">
+                    <div class="stat-card">
+                        <h3>Категорій</h3>
+                        <p id="categoriesCount">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Товарів</h3>
+                        <p id="productsCount">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Користувачів</h3>
+                        <p id="usersCount">0</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Баннеры -->
+            <section id="banners-section" class="admin-section">
+                <h2>Управління банерами</h2>
+                <button onclick="openAddBannerModal()" class="btn-primary">+ Додати банер</button>
+                <table id="bannersTable">
+                    <thead>
+                        <tr>
+                            <th>Фото</th>
+                            <th>Тип сторінки</th>
+                            <th>Інформація</th>
+                            <th>Дії</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </section>
+
+            <!-- Категории -->
+            <section id="categories-section" class="admin-section">
+                <h2>Управління категоріями</h2>
+                <button onclick="openAddCategoryModal()" class="btn-primary">+ Додати категорію</button>
+                <button onclick="openAddSubcategoryModal()" class="btn-primary" style="margin-left: 0.5rem;">+ Додати підкатегорію</button>
+                <table id="categoriesTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Назва</th>
+                            <th>Батьківська</th>
+                            <th>Опис</th>
+                            <th>Дії</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </section>
+
+            <!-- Товары -->
+            <section id="products-section" class="admin-section">
+                <h2>Управління товарами</h2>
+                <button onclick="openAddProductModal()" class="btn-primary">+ Додати товар</button>
+                <table id="productsTable">
+                    <thead>
+                        <tr>
+                            <th>Фото</th>
+                            <th>ID</th>
+                            <th>Назва</th>
+                            <th>Ціна</th>
+                            <th>Статус</th>
+                            <th>Категорія</th>
+                            <th>Дії</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Модальные окна -->
+    <div id="addCategoryModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeAddCategoryModal()">&times;</span>
+            <h2>Додати категорію</h2>
+            <form id="addCategoryForm">
+                <input type="text" id="categoryName" placeholder="Назва" required>
+                <textarea id="categoryDescription" placeholder="Опис (необов'язково)" rows="2" style="margin-top:0.5rem"></textarea>
+                <button type="submit" class="btn-primary">Додати</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="addSubcategoryModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeAddSubcategoryModal()">&times;</span>
+            <h2>Додати підкатегорію</h2>
+            <form id="addSubcategoryForm">
+                <input type="text" id="subcategoryName" placeholder="Назва" required>
+                <textarea id="subcategoryDescription" placeholder="Опис (необов'язково)" rows="2" style="margin-top:0.5rem"></textarea>
+                <select id="subcategoryParent" required style="margin-top:0.5rem;">
+                    <option value="">Оберіть основну категорію</option>
+                </select>
+                <button type="submit" class="btn-primary">Додати підкатегорію</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="addProductModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeAddProductModal()">&times;</span>
+            <h2>Додати товар</h2>
+            <form id="addProductForm">
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Найменування товару <span style="color:red;">*</span></label>
+                <input type="text" id="productName" required style="margin-bottom:1rem;">
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Опис товару <span style="color:red;">*</span></label>
+                <textarea id="productDescription" rows="4" required style="margin-bottom:1rem;"></textarea>
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Картка постачальника</label>
+                <textarea id="productSupplierInfo" rows="3" style="margin-bottom:1rem;"></textarea>
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Посилання на постачальника</label>
+                <input type="url" id="productSupplierUrl" placeholder="https://..." style="margin-bottom:1rem;">
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Статус наявності <span style="color:red;">*</span></label>
+                <select id="productAvailabilityStatus" required style="margin-bottom:1rem;">
+                    <option value="">Оберіть статус наявності</option>
+                    <option value="В наявності">В наявності</option>
+                    <option value="Немає в наявності">Немає в наявності</option>
+                    <option value="Очікуємо на постачання">Очікуємо на постачання</option>
+                </select>
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Ціна <span style="color:red;">*</span></label>
+                <input type="number" id="productPrice" step="0.01" required style="margin-bottom:1rem;">
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Дроп ціна</label>
+                <input type="number" id="productDropPrice" step="0.01" style="margin-bottom:1rem;">
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Кількість</label>
+                <input type="number" id="productStock" style="margin-bottom:1rem;">
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Категорія <span style="color:red;">*</span></label>
+                <select id="productCategory" required style="margin-bottom:1rem;">
+                    <option value="">Оберіть категорію</option>
+                </select>
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Фото товару (до 15)</label>
+                <input type="file" id="productImage" accept="image/*" multiple style="margin-bottom:0.5rem;">
+                <div id="productImagePreview" style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom:1rem;"></div>
+                <input type="hidden" id="mainImageIndex" value="0">
+                <button type="submit" class="btn-primary">Додати</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="addBannerModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeBannerModal()">&times;</span>
+            <h2>Додати банер</h2>
+            <form id="addBannerForm">
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Тип сторінки <span style="color:red;">*</span></label>
+                <select id="bannerPageType" required style="margin-bottom:1rem; width: 100%;">
+                    <option value="main">Головна сторінка</option>
+                    <option value="about">Сторінка "Про нас"</option>
+                </select>
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Зображення банера <span style="color:red;">*</span></label>
+                <input type="file" id="bannerImage" accept="image/*" required style="margin-bottom:1rem;">
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Заголовок (опціонально)</label>
+                <input type="text" id="bannerTitle" placeholder="Введіть заголовок банера" style="margin-bottom:1rem; width: 100%;">
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Опис (опціонально)</label>
+                <textarea id="bannerDescription" placeholder="Введіть опис банера" rows="3" style="margin-bottom:1rem; width: 100%;"></textarea>
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">URL посилання (опціонально)</label>
+                <input type="url" id="bannerLinkUrl" placeholder="https://..." style="margin-bottom:1rem; width: 100%;">
+
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Область посилання на банері</label>
+                <div id="bannerAreaPicker" style="position: relative; width: 100%; height: 200px; border: 2px dashed #ccc; margin-bottom: 1rem; background: #f9f9f9; display: flex; align-items: center; justify-content: center; color: #666;">
+                    <span>Завантажте зображення, щоб налаштувати область</span>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem;">
+                    <div>
+                        <label style="display:block; font-size: 0.9rem; margin-bottom: 0.25rem;">X (%)</label>
+                        <input type="number" id="bannerAreaX" min="0" max="100" value="0" step="0.1" style="width: 100%;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size: 0.9rem; margin-bottom: 0.25rem;">Y (%)</label>
+                        <input type="number" id="bannerAreaY" min="0" max="100" value="0" step="0.1" style="width: 100%;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size: 0.9rem; margin-bottom: 0.25rem;">Ширина (%)</label>
+                        <input type="number" id="bannerAreaWidth" min="1" max="100" value="100" step="0.1" style="width: 100%;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size: 0.9rem; margin-bottom: 0.25rem;">Висота (%)</label>
+                        <input type="number" id="bannerAreaHeight" min="1" max="100" value="100" step="0.1" style="width: 100%;">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary" style="margin-top:0.7rem;">Додати</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="editProductModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeEditProductModal()">&times;</span>
+            <h2>Редагувати товар</h2>
+            <form id="editProductForm">
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Найменування товару <span style="color:red;">*</span></label>
+                <input type="text" id="editProductName" required style="margin-bottom:1rem;">
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Опис товару <span style="color:red;">*</span></label>
+                <textarea id="editProductDescription" rows="4" required style="margin-bottom:1rem;"></textarea>
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Картка постачальника</label>
+                <textarea id="editProductSupplierInfo" rows="3" style="margin-bottom:1rem;"></textarea>
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Посилання на постачальника</label>
+                <input type="url" id="editProductSupplierUrl" placeholder="https://..." style="margin-bottom:1rem;">
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Статус наявності <span style="color:red;">*</span></label>
+                <select id="editProductAvailabilityStatus" required style="margin-bottom:1rem;">
+                    <option value="">Оберіть статус наявності</option>
+                    <option value="В наявності">В наявності</option>
+                    <option value="Немає в наявності">Немає в наявності</option>
+                    <option value="Очікуємо на постачання">Очікуємо на постачання</option>
+                </select>
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Ціна <span style="color:red;">*</span></label>
+                <input type="number" id="editProductPrice" step="0.01" required style="margin-bottom:1rem;">
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Дроп ціна</label>
+                <input type="number" id="editProductDropPrice" step="0.01" style="margin-bottom:1rem;">
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Кількість</label>
+                <input type="number" id="editProductStock" style="margin-bottom:1rem;">
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Категорія <span style="color:red;">*</span></label>
+                <select id="editProductCategory" required style="margin-bottom:1rem;">
+                    <option value="">Оберіть категорію</option>
+                </select>
+                
+                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Фото товару</label>
+                <div id="editProductImages" style="margin-bottom:1rem;"></div>
+                <input type="file" id="editProductImage" accept="image/*" multiple style="margin-bottom:1rem;">
+                <button type="submit" class="btn-primary">Зберегти</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="cartModal" class="modal">
+        <div class="modal-content" style="max-width: 720px; width: 100%;">
+            <span class="close" id="closeCartModal">&times;</span>
+            <h2>Кошик</h2>
+            <div id="cartItems"></div>
+            <div id="cartSummary" style="margin-top: 1rem; font-weight: 700;"></div>
+            <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem;">
+                <button id="checkoutBtn" class="btn-primary">Оформити замовлення</button>
+                <button id="closeCartModalBtn" class="btn-secondary">Закрити</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/notifications.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="admin.js"></script>
+
+    <div class="bottom-panel" id="bottomPanel">
+        <button id="homeBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 9.5L12 3l9 6.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Головна</button>
+        <button id="chatBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H6l-4 4V5a1 1 0 0 1 1-1z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Чат</button>
+        <button id="cartBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 6H6.21L7.25 11.4C7.32 11.79 7.63 12.08 8.02 12.11H18" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 6L3 2H1" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/><circle cx="17" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/></svg>Кошик (<span id="cartCount">0</span>)</button>
+        <button id="profileBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20C4 16.6863 6.68629 14 10 14H14C17.3137 14 20 16.6863 20 20" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Профіль</button>
+        <button id="logoutBtnBottom"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 21H5C4.44772 21 4 20.5523 4 20V4C4 3.44772 4.44772 3 5 3H9" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 17L21 12L16 7" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12H9" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Вихід</button>
+    </div>
+</body>
+</html>

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Чат</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        body {
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+
+    <main class="chat-page">
+        <aside class="chat-sidebar">
+            <div class="chat-sidebar-header">
+                <div>
+                    <h2>Чати</h2>
+                    <div class="chat-mode-switcher">
+                        <button id="showUsersBtn" class="mode-btn active">Користувачі</button>
+                        <button id="showGuestsBtn" class="mode-btn">Гості</button>
+                    </div>
+                </div>
+            </div>
+            <div id="userChatList" class="chat-list"></div>
+            <div id="guestChatList" class="chat-list"></div>
+        </aside>
+
+        <section class="chat-main">
+            <div class="chat-main-header">
+                <div>
+                    <h2 id="chatTitle">Завантаження...</h2>
+                </div>
+            </div>
+            <div id="chatMessages" class="chat-thread"></div>
+            <div class="chat-input-panel">
+                <textarea id="chatInput" placeholder="Напишіть повідомлення..." rows="3"></textarea>
+                <button id="sendChatBtn" class="cart-action-btn">Надіслати</button>
+            </div>
+        </section>
+    </main>
+
+    <div class="bottom-panel" id="bottomPanel">
+        <button id="homeBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 9.5L12 3l9 6.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Головна</button>
+        <button id="chatBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H6l-4 4V5a1 1 0 0 1 1-1z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Чат</button>
+        <button id="cartBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 6H6.21L7.25 11.4C7.32 11.79 7.63 12.08 8.02 12.11H18" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 6L3 2H1" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/><circle cx="17" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/></svg>Кошик (<span id="cartCount">0</span>)</button>
+        <button id="profileBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20C4 16.6863 6.68629 14 10 14H14C17.3137 14 20 16.6863 20 20" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Профіль</button>
+        <button id="logoutBtnBottom"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 21H5C4.44772 21 4 20.5523 4 20V4C4 3.44772 4.44772 3 5 3H9" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 17L21 12L16 7" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12H9" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Вихід</button>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/chat.js"></script>
+</body>
+</html>

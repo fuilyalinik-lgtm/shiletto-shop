@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Admin Login</title>
+</head>
+<body>
+    <h1>Admin Login Test</h1>
+    <button onclick="loginAsAdmin()">Login as Admin</button>
+    <button onclick="openProduct()">Open Product</button>
+    <button onclick="logout()">Logout</button>
+
+    <script>
+        async function loginAsAdmin() {
+            const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: 'admin@example.com', password: 'admin123' })
+            });
+            const data = await response.json();
+            if (data.token) {
+                localStorage.setItem('authToken', data.token);
+                alert('Logged in as admin! Token saved.');
+            } else {
+                alert('Login failed');
+            }
+        }
+
+        function openProduct() {
+            window.location.href = '/product.html?id=1';
+        }
+
+        function logout() {
+            localStorage.removeItem('authToken');
+            alert('Logged out');
+        }
+    </script>
+</body>
+</html>

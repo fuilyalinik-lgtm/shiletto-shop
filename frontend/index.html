@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SHILETTO SHOP</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="header-top">
+            <h1>SHILETTO SHOP</h1>
+            <nav>
+                <div class="catalog-dropdown">
+                    <button type="button" id="catalogBtn" class="nav-link">Каталог</button>
+                    <div id="catalogMenu" class="catalog-menu">
+                        <div id="catalogMenuContent" class="catalog-menu-content"></div>
+                    </div>
+                </div>
+                <button type="button" id="aboutBtn" class="nav-link">Про нас</button>
+                <button type="button" id="contactBtn" class="nav-link">Контакти</button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Категорії товарів - ПРИХОВАНО, тепер в меню Каталог -->
+    <section class="categories-section" style="display: none;">
+        <div id="categoriesList" class="categories-list"></div>
+        <div id="subcategoriesList" class="subcategories-list"></div>
+    </section>
+
+    <div id="cartModal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="closeCartModal">&times;</span>
+            <h2>Ваш кошик</h2>
+            <div id="cartItems"></div>
+            <div id="cartSummary"></div>
+            <button id="checkoutBtn" class="cart-action-btn checkout-btn">Оформити замовлення</button>
+        </div>
+    </div>
+
+    <div id="chatModal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="closeChatModal">&times;</span>
+            <h2>Чат з менеджером</h2>
+            <div class="chat-modal-body">
+                <div id="adminChatUserList" style="display: none; margin-bottom: 0.5rem; max-height: 180px; overflow-y: auto; border: 1px solid #ccc; padding: 0.5rem; border-radius: 6px;"></div>
+                <div id="adminChatStatus" style="display: none; margin-bottom: 0.5rem; font-weight: bold;"></div>
+                <div id="chatMessages" class="chat-messages"></div>
+                <div class="chat-input-container">
+                    <textarea id="chatInput" placeholder="Напишіть повідомлення..." rows="2"></textarea>
+                    <button id="sendChatBtn" class="cart-action-btn">Надіслати</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="deleteConfirmModal" class="modal">
+        <div class="modal-content confirm-modal-content">
+            <span class="close" id="closeDeleteConfirmModal">&times;</span>
+            <h2>Підтвердження видалення</h2>
+            <p>Ви дійсно хочете видалити це повідомлення?</p>
+            <div style="display: flex; gap: 0.75rem; justify-content: center; margin-top: 1rem;">
+                <button id="confirmDeleteBtn" class="cart-action-btn delete-btn">Видалити</button>
+                <button id="cancelDeleteBtn" class="cart-action-btn" style="background: #666;">Скасування</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="orderConfirmModal" class="modal">
+        <div class="modal-content confirm-modal-content">
+            <span class="close" id="closeOrderConfirmModal">&times;</span>
+            <h2>Підтвердження замовлення</h2>
+            <p>Ви дійсно бажаєте надіслати це замовлення менеджеру для оформлення?</p>
+            <div class="confirm-actions">
+                <button id="confirmOrderBtn" class="cart-action-btn checkout-btn">Надіслати</button>
+                <button id="cancelOrderBtn" class="cart-action-btn" style="background: #666;">Скасування</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-layout">
+        <!-- Основной контент -->
+        <main class="main-content">
+            <!-- Баннеры -->
+            <section class="banners-section">
+                <div id="bannersList" class="banners-container"></div>
+            </section>
+
+            <!-- Товары -->
+            <section class="products-section">
+                <h2 id="productsTitle">Товари</h2>
+                <div class="product-controls">
+                    <input type="text" id="productSearch" placeholder="Пошук товарів..." class="search-input">
+                    <select id="productSort" class="sort-select">
+                        <option value="name">За назвою</option>
+                        <option value="price-asc">Ціна: по зростанню</option>
+                        <option value="price-desc">Ціна: по спаданню</option>
+                        <option value="stock">За наявністю</option>
+                    </select>
+                </div>
+                <div id="productsList" class="products-list"></div>
+            </section>
+        </main>
+    </div>
+
+    <div class="bottom-panel" id="bottomPanel">
+        <button id="homeBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 9.5L12 3l9 6.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Головна</button>
+        <button id="chatBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H6l-4 4V5a1 1 0 0 1 1-1z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Чат</button>
+        <button id="cartBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 6H6.21L7.25 11.4C7.32 11.79 7.63 12.08 8.02 12.11H18" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 6L3 2H1" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/><circle cx="17" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/></svg>Кошик (<span id="cartCount">0</span>)</button>
+        <button id="profileBtn" style="display:none;"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20C4 16.6863 6.68629 14 10 14H14C17.3137 14 20 16.6863 20 20" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Профіль</button>
+        <button id="loginBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20C4 16.6863 6.68629 14 10 14H14C17.3137 14 20 16.6863 20 20" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Вхід</button>
+        <button id="registerBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20C4 16.6863 6.68629 14 10 14H14C17.3137 14 20 16.6863 20 20" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 8V12" stroke="#333333" stroke-width="1.8" stroke-linecap="round"/><path d="M16 10H20" stroke="#333333" stroke-width="1.8" stroke-linecap="round"/></svg>Реєстрація</button>
+        <button id="logoutBtn" style="display: none;"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 21H5C4.44772 21 4 20.5523 4 20V4C4 3.44772 4.44772 3 5 3H9" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 17L21 12L16 7" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12H9" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Вихід</button>
+    </div>
+
+    <!-- Модальні вікна -->
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Вхід</h2>
+            <form id="loginForm">
+                <input type="email" id="loginEmail" placeholder="Електронна пошта" required>
+                <input type="password" id="loginPassword" placeholder="Пароль" required>
+                <button type="submit">Вхід</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="registerModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Реєстрація</h2>
+            <form id="registerForm">
+                <input type="text" id="regUsername" placeholder="Ім'я користувача" required>
+                <input type="email" id="regEmail" placeholder="Електронна пошта" required>
+                <input type="password" id="regPassword" placeholder="Пароль" required>
+                <button type="submit">Зареєструватися</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/notifications.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/script.js"></script>
+    <script>
+        // Обработчики для навигационных кнопок на главной странице
+        document.getElementById('aboutBtn').addEventListener('click', () => {
+            window.location.href = '/about';
+        });
+        document.getElementById('contactBtn').addEventListener('click', () => {
+            window.location.href = '/contact';
+        });
+    </script>
+</body>
+</html>

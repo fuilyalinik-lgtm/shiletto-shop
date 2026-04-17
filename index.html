@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SHILETTO SHOP</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="header-top">
+            <h1>SHILETTO SHOP</h1>
+            <nav>
+                <button type="button" id="aboutBtn" class="nav-link active">Про нас</button>
+                <button type="button" id="contactBtn" class="nav-link">Контакти</button>
+            </nav>
+        </div>
+    </header>
+    <main>
+        <p>Здесь будет контент сайта.</p>
+    </main>
+    <footer>
+        <p>&copy; 2023 Мой Сайт</p>
+    </footer>
+    <script>
+        // Обработчики для навигационных кнопок на главной странице
+        document.getElementById('aboutBtn').addEventListener('click', () => {
+            window.location.href = '/about';
+        });
+        document.getElementById('contactBtn').addEventListener('click', () => {
+            window.location.href = '/contact';
+        });
+    </script>
+    <script src="js/script.js"></script>
+</body>
+</html>

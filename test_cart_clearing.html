@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cart Clearing Test</title>
+</head>
+<body>
+    <h1>Тест очистки корзины</h1>
+    <div id="cartItems"></div>
+    <div id="cartSummary"></div>
+    <button id="testClearCart">Очистить корзину</button>
+    <button id="checkCart">Проверить корзину</button>
+
+    <script>
+        // Имитация функций из основного кода
+        function getCart() {
+            try {
+                const data = localStorage.getItem('cart');
+                return data ? JSON.parse(data) : [];
+            } catch (error) {
+                console.error('Помилка читання кошика:', error);
+                return [];
+            }
+        }
+
+        function saveCart(cart) {
+            if (cart.length === 0) {
+                // Явно удаляем ключ из localStorage при очистке корзины
+                localStorage.removeItem('cart');
+                console.log('Cart key removed from localStorage');
+            } else {
+                localStorage.setItem('cart', JSON.stringify(cart));
+            }
+        }
+
+        function updateCartCount() {
+            const cart = getCart();
+            const count = cart.reduce((sum, item) => sum + item.quantity, 0);
+            console.log('Cart count:', count);
+        }
+
+        // Тестовая корзина
+        const testCart = [
+            { id: 1, name: 'Test Product 1', price: 100, quantity: 2 },
+            { id: 2, name: 'Test Product 2', price: 200, quantity: 1 }
+        ];
+
+        // Добавляем тестовую корзину
+        saveCart(testCart);
+        console.log('Test cart added:', getCart());
+
+        // Обработчики кнопок
+        document.getElementById('testClearCart').onclick = () => {
+            console.log('🛒 Clearing cart...');
+            saveCart([]);
+
+            const cartAfterClear = getCart();
+            console.log('🛒 Cart after clear:', cartAfterClear);
+            console.log('🛒 localStorage.getItem("cart"):', localStorage.getItem('cart'));
+
+            updateCartCount();
+            document.getElementById('cartItems').innerHTML = '';
+            document.getElementById('cartSummary').textContent = '';
+            console.log('🛒 Cart UI cleared');
+        };
+
+        document.getElementById('checkCart').onclick = () => {
+            const cart = getCart();
+            console.log('Current cart:', cart);
+            console.log('localStorage cart:', localStorage.getItem('cart'));
+        };
+    </script>
+</body>
+</html>

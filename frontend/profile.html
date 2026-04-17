@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Профіль користувача</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <h1>Мій профіль</h1>
+        <nav>
+            <button id="logoutBtn">Вихід</button>
+        </nav>
+    </header>
+
+    <main class="main-content" style="padding: 1rem; max-width: 900px; margin: auto;">
+        <section>
+            <h2>Персональні дані</h2>
+            <form id="profileForm">
+                <input type="text" id="fullName" placeholder="ПІБ" required>
+                <input type="tel" id="phone" placeholder="Телефон" required>
+                <input type="text" id="address" placeholder="Адреса доставки" required>
+                <button type="submit" class="cart-action-btn">Зберегти дані</button>
+            </form>
+            <p id="profileStatus" style="margin-top: 0.75rem; color: green;"></p>
+        </section>
+
+        <section style="margin-top: 2rem;">
+            <h2>Зв'язатися з менеджером</h2>
+            <div>
+                <textarea id="contactMessage" placeholder="Опишіть ваш запит або уточнення по замовленню" rows="4" required></textarea>
+                <button id="sendContactBtn" class="cart-action-btn" style="margin-top: 0.5rem;">Надіслати менеджеру</button>
+                <p id="contactStatus" style="margin-top: 0.5rem; color: green;"></p>
+            </div>
+        </section>
+    </main>
+
+    <div class="bottom-panel" id="bottomPanel">
+        <button id="homeBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 9.5L12 3l9 6.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Головна</button>
+        <button id="chatBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H6l-4 4V5a1 1 0 0 1 1-1z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Чат</button>
+        <button id="cartBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 6H6.21L7.25 11.4C7.32 11.79 7.63 12.08 8.02 12.11H18" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 6L3 2H1" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/><circle cx="17" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/></svg>Кошик (<span id="cartCount">0</span>)</button>
+        <button id="profileBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20C4 16.6863 6.68629 14 10 14H14C17.3137 14 20 16.6863 20 20" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Профіль</button>
+        <button id="logoutBtnBottom"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 21H5C4.44772 21 4 20.5523 4 20V4C4 3.44772 4.44772 3 5 3H9" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 17L21 12L16 7" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12H9" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Вихід</button>
+    </div>
+
+    <div id="chatModal" class="modal">
+        <div class="modal-content">
+            <div class="chat-modal-header" style="position: relative; margin-bottom: 0.75rem;">
+                <button id="backToUserListBtn" class="btn-secondary" style="display:none; position:absolute; left:12px; top:50%; transform: translateY(-50%); padding:0.3rem 0.6rem; font-size:0.9rem;">← Повернутися до списку</button>
+                <h2 id="chatModalTitle" style="margin:0; text-align:center;">Чат з менеджером</h2>
+                <span class="close" id="closeChatModal" style="position:absolute; right:12px; top:50%; transform: translateY(-50%); font-size:28px;">&times;</span>
+            </div>
+            <div class="chat-modal-body">
+                <div id="adminChatUserList" style="display: none; margin-bottom: 0.5rem; max-height: 180px; overflow-y: auto; border: 1px solid #ccc; padding: 0.5rem; border-radius: 6px;"></div>
+                <div id="adminChatStatus" style="display: none; margin-bottom: 0.5rem; font-weight: bold;"></div>
+                <div id="chatMessages" class="chat-messages"></div>
+                <div class="chat-input-container">
+                    <textarea id="chatInput" placeholder="Напишіть повідомлення..." rows="2"></textarea>
+                    <button id="sendChatBtn" class="cart-action-btn">Надіслати</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="cartModal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="closeCartModal">&times;</span>
+            <h2>Ваш кошик</h2>
+            <div id="cartItems"></div>
+            <div id="cartSummary"></div>
+            <button id="checkoutBtn" class="cart-action-btn checkout-btn">Оформити замовлення</button>
+        </div>
+    </div>
+
+    <script src="js/notifications.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/profile.js"></script>
+</body>
+</html>

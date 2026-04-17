@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Cart</title>
+</head>
+<body>
+    <h1>Test Cart Storage</h1>
+    <button onclick="addTestItem()">Add Test Item</button>
+    <button onclick="clearCart()">Clear Cart</button>
+    <button onclick="viewCart()">View Cart</button>
+    <button onclick="goToCheckout()">Go to Checkout</button>
+    <div id="cartDisplay"></div>
+
+    <script>
+        function addTestItem() {
+            const testItem = {
+                id: 1,
+                name: "Test Product",
+                price: 100,
+                quantity: 2,
+                image: "/uploads/test.jpg"
+            };
+
+            let cart = JSON.parse(localStorage.getItem('cart') || '[]');
+            cart.push(testItem);
+            localStorage.setItem('cart', JSON.stringify(cart));
+            alert('Test item added!');
+            viewCart();
+        }
+
+        function clearCart() {
+            localStorage.removeItem('cart');
+            viewCart();
+        }
+
+        function viewCart() {
+            const cart = JSON.parse(localStorage.getItem('cart') || '[]');
+            document.getElementById('cartDisplay').innerHTML = '<pre>' + JSON.stringify(cart, null, 2) + '</pre>';
+        }
+
+        function goToCheckout() {
+            window.location.href = 'checkout.html';
+        }
+
+        // Load cart on page load
+        viewCart();
+    </script>
+</body>
+</html>
