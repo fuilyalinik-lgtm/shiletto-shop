@@ -2293,9 +2293,9 @@ async function loadChatMessages() {
 // Обработчик кнопки Google OAuth
 const googleLoginBtn = document.getElementById('googleLoginBtn');
 if (googleLoginBtn) {
-    googleLoginBtn.onclick = () => {
+    googleLoginBtn.onclick = async () => {
         const nextPath = `${window.location.pathname}${window.location.search}`;
-        window.location.href = `/auth/google?next=${encodeURIComponent(nextPath)}`;
+        await startGoogleAuth(nextPath);
     };
 }
 

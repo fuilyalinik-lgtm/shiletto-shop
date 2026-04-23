@@ -1062,10 +1062,11 @@ function setupEventListeners() {
     }
 
     if (googleLoginBtn) {
-        googleLoginBtn.onclick = () => {
-            saveCheckoutFormState();
+        googleLoginBtn.onclick = async () => {
             const nextPath = `${window.location.pathname}${window.location.search}`;
-            window.location.href = `/auth/google?next=${encodeURIComponent(nextPath)}`;
+            await startGoogleAuth(nextPath, {
+                beforeRedirect: () => saveCheckoutFormState()
+            });
         };
     }
 
@@ -1318,9 +1319,10 @@ if (document.readyState === 'loading') {
 // Обработчик кнопки Google OAuth
 const googleRegisterBtn = document.getElementById('googleRegisterBtn');
 if (googleRegisterBtn) {
-    googleRegisterBtn.onclick = () => {
-        saveCheckoutFormState();
+    googleRegisterBtn.onclick = async () => {
         const nextPath = `${window.location.pathname}${window.location.search}`;
-        window.location.href = `/auth/google?next=${encodeURIComponent(nextPath)}`;
+        await startGoogleAuth(nextPath, {
+            beforeRedirect: () => saveCheckoutFormState()
+        });
     };
 }

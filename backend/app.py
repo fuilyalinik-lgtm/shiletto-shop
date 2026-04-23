@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, send_from_directory, abort, redirect, url_for, session
+from flask import Flask, jsonify, request, send_from_directory, abort, redirect, url_for, session, has_request_context
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 import json
@@ -99,9 +99,57 @@ ORDER_STATUS_RECEIVED = 'Отримано'
 ORDER_STATUS_REFUSED = 'Відмова'
 
 # ===== GOOGLE OAUTH КОНФИГУРАЦИЯ =====
-GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', 'your-google-client-id')
-GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', 'your-google-client-secret')
-GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:5000/auth/google/callback')
+GOOGLE_CLIENT_ID = (os.getenv('GOOGLE_CLIENT_ID') or '').strip()
+GOOGLE_CLIENT_SECRET = (os.getenv('GOOGLE_CLIENT_SECRET') or '').strip()
+GOOGLE_REDIRECT_URI = (os.getenv('GOOGLE_REDIRECT_URI') or '').strip()
+GOOGLE_CLIENT_ID_PLACEHOLDERS = {
+    '',
+    'your-google-client-id',
+    'your_google_client_id',
+    'your_google_client_id_here',
+}
+GOOGLE_CLIENT_SECRET_PLACEHOLDERS = {
+    '',
+    'your-google-client-secret',
+    'your_google_client_secret',
+    'your_google_client_secret_here',
+}
+LOCAL_OAUTH_HOSTS = {'localhost', '127.0.0.1'}
+
+
+def get_google_redirect_uri():
+    if GOOGLE_REDIRECT_URI:
+        return GOOGLE_REDIRECT_URI
+    if has_request_context():
+        return url_for('google_callback', _external=True)
+    return 'http://localhost:5000/auth/google/callback'
+
+
+def get_google_oauth_status():
+    redirect_uri = get_google_redirect_uri()
+    parsed_redirect_uri = urlparse(redirect_uri)
+    issues = []
+
+    if GOOGLE_CLIENT_ID in GOOGLE_CLIENT_ID_PLACEHOLDERS:
+        issues.append('missing_client_id')
+    if GOOGLE_CLIENT_SECRET in GOOGLE_CLIENT_SECRET_PLACEHOLDERS:
+        issues.append('missing_client_secret')
+    if parsed_redirect_uri.scheme not in {'http', 'https'} or not parsed_redirect_uri.netloc:
+        issues.append('invalid_redirect_uri')
+
+    if has_request_context():
+        request_host = (request.host.split(':', 1)[0] or '').lower()
+        redirect_host = (parsed_redirect_uri.hostname or '').lower()
+        if request_host and request_host not in LOCAL_OAUTH_HOSTS and redirect_host in LOCAL_OAUTH_HOSTS:
+            issues.append('redirect_uri_points_to_localhost')
+
+    return {
+        'configured': not issues,
+        'issues': issues,
+        'redirect_uri': redirect_uri,
+        'client_id_configured': 'missing_client_id' not in issues,
+        'client_secret_configured': 'missing_client_secret' not in issues,
+    }
 
 # ===== МОДЕЛИ БД =====
 class User(db.Model):
@@ -2335,7 +2383,20 @@ def chat_page():
 # ===== GOOGLE OAUTH МАРШРУТЫ =====
 @app.route('/test')
 def test_route():
-    return f"GOOGLE_CLIENT_ID: {GOOGLE_CLIENT_ID[:10]}..., SECRET exists: {bool(GOOGLE_CLIENT_SECRET)}"
+    status = get_google_oauth_status()
+    client_id_preview = GOOGLE_CLIENT_ID[:12] if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_ID not in GOOGLE_CLIENT_ID_PLACEHOLDERS else 'not-configured'
+    return (
+        f"GOOGLE_CLIENT_ID: {client_id_preview}..., "
+        f"configured: {status['configured']}, "
+        f"issues: {','.join(status['issues']) or 'none'}, "
+        f"redirect_uri: {status['redirect_uri']}"
+    )
+
+
+@app.route('/api/auth/google/status', methods=['GET'])
+def google_oauth_status():
+    status = get_google_oauth_status()
+    return jsonify(status), 200
 
 @app.route('/routes')
 def list_routes():
@@ -2348,6 +2409,16 @@ def list_routes():
 def google_login():
     """Инициировать OAuth вход через Google"""
     try:
+        oauth_status = get_google_oauth_status()
+        if not oauth_status['configured']:
+            logger.error('Google OAuth configuration is invalid: %s', ', '.join(oauth_status['issues']))
+            error_code = (
+                'google_oauth_redirect_invalid'
+                if 'redirect_uri_points_to_localhost' in oauth_status['issues'] or 'invalid_redirect_uri' in oauth_status['issues']
+                else 'google_oauth_not_configured'
+            )
+            return redirect(f'/?error={error_code}')
+
         next_url = request.args.get('next', '/') or '/'
         if not next_url.startswith('/'):
             next_url = '/'
@@ -2356,7 +2427,7 @@ def google_login():
         google = OAuth2Session(
             GOOGLE_CLIENT_ID,
             scope=['openid', 'email', 'profile'],
-            redirect_uri=GOOGLE_REDIRECT_URI
+            redirect_uri=oauth_status['redirect_uri']
         )
         authorization_url, state = google.authorization_url(
             'https://accounts.google.com/o/oauth2/auth',
@@ -2393,7 +2464,7 @@ def google_callback():
         google = OAuth2Session(
             GOOGLE_CLIENT_ID,
             state=session.get('oauth_state'),
-            redirect_uri=GOOGLE_REDIRECT_URI
+            redirect_uri=get_google_redirect_uri()
         )
         
         print(f"Session state: {session.get('oauth_state')}")  # Отладка

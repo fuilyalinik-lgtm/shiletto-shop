@@ -530,6 +530,62 @@ async function logoutUser() {
     refreshChatOrderAttentionState();
 }
 
+async function getGoogleOAuthStatus() {
+    return await apiRequest('/auth/google/status', 'GET');
+}
+
+function getGoogleOAuthIssueMessage(status) {
+    const issues = Array.isArray(status && status.issues) ? status.issues : [];
+
+    if (issues.includes('redirect_uri_points_to_localhost') || issues.includes('invalid_redirect_uri')) {
+        return 'Вхід через Google ще не налаштований для цього домену.';
+    }
+
+    if (issues.includes('missing_client_id') || issues.includes('missing_client_secret')) {
+        return 'Вхід через Google тимчасово недоступний на сервері.';
+    }
+
+    return 'Не вдалося розпочати вхід через Google.';
+}
+
+function notifyGoogleOAuthError(message) {
+    if (typeof window.showNotification === 'function') {
+        window.showNotification(message, 'Помилка', 'error', 5000);
+        return;
+    }
+
+    if (typeof window.queueNotification === 'function') {
+        window.queueNotification(message, 'Помилка', 'error', 5000);
+        return;
+    }
+
+    window.alert(message);
+}
+
+async function startGoogleAuth(nextPath = '/', options = {}) {
+    const normalizedNextPath = typeof nextPath === 'string' && nextPath.startsWith('/')
+        ? nextPath
+        : '/';
+
+    try {
+        const status = await getGoogleOAuthStatus();
+        if (!status || !status.configured) {
+            notifyGoogleOAuthError(getGoogleOAuthIssueMessage(status));
+            return false;
+        }
+
+        if (typeof options.beforeRedirect === 'function') {
+            options.beforeRedirect();
+        }
+
+        window.location.href = `/auth/google?next=${encodeURIComponent(normalizedNextPath)}`;
+        return true;
+    } catch (error) {
+        notifyGoogleOAuthError(error && error.message ? error.message : 'Не вдалося розпочати вхід через Google.');
+        return false;
+    }
+}
+
 async function getUserProfile() {
     return await apiRequest('/user/profile', 'GET');
 }

@@ -1363,9 +1363,9 @@ if (loginForm) {
 // Обработчик кнопки Google OAuth
 const googleLoginBtn = document.getElementById('googleLoginBtn');
 if (googleLoginBtn) {
-    googleLoginBtn.onclick = () => {
+    googleLoginBtn.onclick = async () => {
         const nextPath = `${window.location.pathname}${window.location.search}`;
-        window.location.href = `/auth/google?next=${encodeURIComponent(nextPath)}`;
+        await startGoogleAuth(nextPath);
     };
 }
 
@@ -1968,6 +1968,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.history.replaceState({}, document.title, window.location.pathname);
         if (error === 'oauth_failed') {
             showNotification('Помилка авторизації через Google', 'Помилка', 'error', 4000);
+        } else if (error === 'google_oauth_not_configured') {
+            showNotification('Вхід через Google тимчасово не налаштований на сервері.', 'Помилка', 'error', 5000);
+        } else if (error === 'google_oauth_redirect_invalid') {
+            showNotification('Вхід через Google ще не налаштований для поточного домену сайту.', 'Помилка', 'error', 5000);
         }
     }
 
