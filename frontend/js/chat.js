@@ -6,6 +6,12 @@ const guestChatList = document.getElementById('guestChatList');
 const chatTitle = document.getElementById('chatTitle');
 const showUsersBtn = document.getElementById('showUsersBtn');
 const showGuestsBtn = document.getElementById('showGuestsBtn');
+const chatOrderStatusPanel = document.getElementById('chatOrderStatusPanel');
+const chatOrderSelect = document.getElementById('chatOrderSelect');
+const chatOrderStatusSelect = document.getElementById('chatOrderStatusSelect');
+const chatOrderTtnInput = document.getElementById('chatOrderTtnInput');
+const applyChatOrderStatusBtn = document.getElementById('applyChatOrderStatusBtn');
+const chatAttachmentController = typeof initChatAttachmentUI === 'function' ? initChatAttachmentUI() : null;
 
 let currentUser = null;
 let isAdminUser = false;
@@ -13,6 +19,61 @@ let currentChatMode = 'user';
 let currentChatUserId = null;
 let currentGuestIdentifier = null;
 let currentChatName = '';
+let currentUserOrders = [];
+
+function initChatInputAutoGrow(textarea) {
+    if (!textarea || textarea.dataset.autoGrowReady === 'true') {
+        return null;
+    }
+
+    textarea.dataset.autoGrowReady = 'true';
+
+    const parsePx = value => Number.parseFloat(value) || 0;
+    const measureBaseHeight = () => {
+        const styles = window.getComputedStyle(textarea);
+        const rows = Math.max(Number(textarea.getAttribute('rows')) || 2, 1);
+        const lineHeight = parsePx(styles.lineHeight) || 20;
+        const padding = parsePx(styles.paddingTop) + parsePx(styles.paddingBottom);
+        const border = parsePx(styles.borderTopWidth) + parsePx(styles.borderBottomWidth);
+        const minHeight = parsePx(styles.minHeight);
+        return Math.max(minHeight, rows * lineHeight + padding + border);
+    };
+    let baseHeight = measureBaseHeight();
+
+    const syncHeight = () => {
+        const expandedHeight = baseHeight * 2;
+        const hasText = textarea.value.trim().length > 0;
+
+        textarea.classList.add('chat-input-auto-grow');
+        textarea.classList.toggle('is-expanded', hasText);
+        textarea.style.height = 'auto';
+        textarea.style.height = `${hasText ? Math.max(textarea.scrollHeight, expandedHeight) : baseHeight}px`;
+    };
+
+    const handleResize = () => {
+        baseHeight = measureBaseHeight();
+        syncHeight();
+    };
+
+    textarea.addEventListener('input', syncHeight);
+    window.addEventListener('resize', handleResize);
+    syncHeight();
+
+    return {
+        syncHeight,
+        reset() {
+            textarea.value = '';
+            syncHeight();
+        }
+    };
+}
+
+const chatInputAutoGrow = initChatInputAutoGrow(chatInput);
+
+function syncChatAttachmentAvailability() {
+    const enabled = currentChatMode !== 'adminGuest';
+    chatAttachmentController?.setEnabled?.(enabled);
+}
 
 function escapeHtml(text) {
     if (typeof text !== 'string') return text;
@@ -37,6 +98,64 @@ function formatChatDate(dateStr) {
     });
 }
 
+function getOrderNumberFromReceiptHtml(message) {
+    if (typeof message !== 'string') return '';
+    const match = message.match(/Чек замовлення(?:\s*№)?\s*([^<\n]+)/i);
+    return match ? String(match[1]).trim() : '';
+}
+
+function getDefaultOrderStatus() {
+    return getAdminOrderStatuses()[0];
+}
+
+function buildAdminReceiptControls(message) {
+    if (!isAdminUser || currentChatMode !== 'adminUser') return '';
+
+    const orderNumber = getOrderNumberFromReceiptHtml(message);
+    if (!orderNumber) return '';
+
+    const order = currentUserOrders.find(item => String(item.order_number || '').trim() === orderNumber);
+    if (!order) return '';
+
+    const prepaymentReceived = Boolean(order.prepayment_received);
+    const prepaymentAmount = prepaymentReceived ? (order.prepayment_amount ?? '') : '';
+
+    return `
+        <div class="chat-receipt-admin-tools" data-order-id="${order.id}">
+            <label class="chat-receipt-prepayment-toggle">
+                <input type="checkbox" class="chat-receipt-prepayment-checkbox" ${prepaymentReceived ? 'checked' : ''}>
+                <span>Передплата отримана</span>
+            </label>
+            <div class="chat-receipt-prepayment-row" style="${prepaymentReceived ? '' : 'display:none;'}">
+                <input type="number" min="0" step="0.01" class="chat-receipt-prepayment-input" value="${escapeHtml(String(prepaymentAmount))}" placeholder="Сума передплати">
+                <button type="button" class="chat-receipt-save-btn">Зберегти передплату</button>
+            </div>
+        </div>
+    `;
+}
+
+function bindAdminReceiptControls() {
+    if (!chatMessagesContainer) return;
+
+    chatMessagesContainer.querySelectorAll('.chat-receipt-prepayment-checkbox').forEach(checkbox => {
+        checkbox.onchange = event => {
+            const tools = event.target.closest('.chat-receipt-admin-tools');
+            const row = tools?.querySelector('.chat-receipt-prepayment-row');
+            const input = tools?.querySelector('.chat-receipt-prepayment-input');
+            if (row) {
+                row.style.display = event.target.checked ? 'grid' : 'none';
+            }
+            if (!event.target.checked && input) {
+                input.value = '';
+            }
+        };
+    });
+
+    chatMessagesContainer.querySelectorAll('.chat-receipt-save-btn').forEach(button => {
+        button.onclick = handleReceiptPrepaymentSave;
+    });
+}
+
 function setActiveChatItem(selector) {
     document.querySelectorAll('.chat-list-item').forEach(item => item.classList.remove('active'));
     if (selector) selector.classList.add('active');
@@ -45,6 +164,89 @@ function setActiveChatItem(selector) {
 function renderEmptyThread(message = 'Оберіть чат у лівому меню, щоб почати розмову.') {
     if (!chatMessagesContainer) return;
     chatMessagesContainer.innerHTML = `<div class="chat-empty">${message}</div>`;
+}
+
+function getAdminOrderStatuses() {
+    return [
+        'Замовлення очікує підтвердження менеджером',
+        'Замовлення очікує на передплату',
+        'Замовлення прийнято, очікуйте номер ТТН',
+        'Передплата підтверджена та замовлення прийнято. Очікуйте номер ТТН',
+        'Оплата підтверджена та замовлення прийнято. Очікуйте номер ТТН',
+        'Замовлення у процесі доставки',
+        'Замовлення очікує Вас на пошті!',
+        'Отримано',
+        'Відмова'
+    ];
+}
+
+function isDeliveryOrderStatus(status) {
+    return status === 'Замовлення у процесі доставки';
+}
+
+function hideChatOrderStatusPanel() {
+    currentUserOrders = [];
+    if (chatOrderStatusPanel) chatOrderStatusPanel.style.display = 'none';
+    if (chatOrderSelect) chatOrderSelect.innerHTML = '<option value="">Оберіть замовлення</option>';
+    if (chatOrderStatusSelect) chatOrderStatusSelect.value = getAdminOrderStatuses()[0];
+    if (chatOrderTtnInput) {
+        chatOrderTtnInput.value = '';
+        chatOrderTtnInput.style.display = 'none';
+    }
+}
+
+async function loadChatOrderControls(userId) {
+    if (!chatOrderStatusPanel || !chatOrderSelect || !chatOrderStatusSelect || !isAdminUser) return;
+
+    try {
+        const orders = await getAllOrders();
+        currentUserOrders = Array.isArray(orders) ? orders.filter(order => order.user_id === userId) : [];
+
+        if (!currentUserOrders.length) {
+            hideChatOrderStatusPanel();
+            return;
+        }
+
+        chatOrderSelect.innerHTML = currentUserOrders.map(order => `
+            <option value="${order.id}">${order.order_number || `Замовлення #${order.id}`}</option>
+        `).join('');
+
+        chatOrderStatusPanel.style.display = 'flex';
+        syncChatOrderStatusSelect();
+    } catch (error) {
+        console.error('Помилка завантаження замовлень для чату:', error);
+        hideChatOrderStatusPanel();
+    }
+}
+
+function syncChatOrderStatusSelect() {
+    if (!chatOrderSelect || !chatOrderStatusSelect) return;
+
+    const orderId = Number(chatOrderSelect.value);
+    const selectedOrder = currentUserOrders.find(order => order.id === orderId);
+    chatOrderStatusSelect.value = selectedOrder?.status || getAdminOrderStatuses()[0];
+    if (chatOrderTtnInput) {
+        chatOrderTtnInput.value = selectedOrder?.tracking_number || '';
+        chatOrderTtnInput.style.display = isDeliveryOrderStatus(chatOrderStatusSelect.value) ? '' : 'none';
+    }
+}
+
+function handleChatStatusSelectChange() {
+    if (!chatOrderStatusSelect || !chatOrderTtnInput) return;
+    chatOrderTtnInput.style.display = isDeliveryOrderStatus(chatOrderStatusSelect.value) ? '' : 'none';
+}
+
+function notifyChatOrderStatusUpdated(status, trackingNumber = '') {
+    const message = isDeliveryOrderStatus(status) && trackingNumber
+        ? `Статус замовлення оновлено. ТТН ${trackingNumber} збережено.`
+        : 'Статус замовлення оновлено.';
+
+    if (typeof showNotification === 'function') {
+        showNotification(message, 'Успіх', 'success', 3000);
+        return;
+    }
+
+    alert(message);
 }
 
 async function initChatPage() {
@@ -87,6 +289,10 @@ async function initChatPage() {
     };
 
     sendChatBtn.onclick = handleSendMessage;
+    if (chatOrderSelect) chatOrderSelect.onchange = syncChatOrderStatusSelect;
+    if (chatOrderStatusSelect) chatOrderStatusSelect.onchange = handleChatStatusSelectChange;
+    if (applyChatOrderStatusBtn) applyChatOrderStatusBtn.onclick = handleChatOrderStatusSave;
+    syncChatAttachmentAvailability();
     initBottomPanelButtons();
 }
 
@@ -127,6 +333,7 @@ async function selectUserThread(element) {
     currentChatName = 'Менеджер';
     chatTitle.textContent = 'Чат з менеджером';
     setActiveChatItem(element);
+    syncChatAttachmentAvailability();
     await loadUserChat();
 }
 
@@ -134,6 +341,7 @@ async function loadUserChat() {
     try {
         const messages = await getUserChat();
         if (Array.isArray(messages) && messages.length) {
+            maybeClearPendingOrderChatAttention(messages);
             renderMessages(messages);
         } else {
             renderEmptyThread('Ваш чат порожній. Напишіть перше повідомлення.');
@@ -153,15 +361,9 @@ async function loadAdminChatLists() {
         let users = await getAdminUsers();
         // Сортировка: сначала с непрочитанными, по времени последнего сообщения
         users.sort((a, b) => {
-            if (a.last_unread_time && b.last_unread_time) {
-                return new Date(b.last_unread_time) - new Date(a.last_unread_time);
-            } else if (a.last_unread_time) {
-                return -1;
-            } else if (b.last_unread_time) {
-                return 1;
-            } else {
-                return 0;
-            }
+            const aTime = a.last_message_time ? new Date(a.last_message_time).getTime() : 0;
+            const bTime = b.last_message_time ? new Date(b.last_message_time).getTime() : 0;
+            return bTime - aTime;
         });
         if (users.length) {
             users.forEach(user => {
@@ -190,6 +392,11 @@ async function loadAdminChatLists() {
 
     try {
         const guests = await getGuestChatUsers();
+        guests.sort((a, b) => {
+            const aTime = a.last_message_time ? new Date(a.last_message_time).getTime() : 0;
+            const bTime = b.last_message_time ? new Date(b.last_message_time).getTime() : 0;
+            return bTime - aTime;
+        });
         if (guests.length) {
             guests.forEach(guest => {
                 const item = document.createElement('button');
@@ -226,6 +433,8 @@ function openAdminUserChat(userId, name, element) {
     currentChatName = name;
     chatTitle.textContent = `Чат з ${name}`;
     setActiveChatItem(element);
+    syncChatAttachmentAvailability();
+    loadChatOrderControls(userId);
     loadAdminUserChat(userId);
 }
 
@@ -250,6 +459,8 @@ function openAdminGuestChat(identifier, phone, element) {
     currentChatName = phone || 'Гість';
     chatTitle.textContent = `Чат гостя ${currentChatName}`;
     setActiveChatItem(element);
+    hideChatOrderStatusPanel();
+    syncChatAttachmentAvailability();
     loadAdminGuestChat(identifier);
 }
 
@@ -274,12 +485,8 @@ function renderMessages(messages) {
     chatMessagesContainer.innerHTML = messages.map(msg => {
         const senderClass = msg.sender === 'admin' ? 'chat-admin' : 'chat-user';
         const senderName = msg.sender === 'admin' ? (isAdminUser ? 'Ви' : 'Менеджер') : (isAdminUser ? currentChatName || 'Користувач' : 'Ви');
-        
-        // Проверяем, содержит ли сообщение HTML (чеки заказов)
-        const isHtmlMessage = msg.message.includes('<div') || msg.message.includes('<span') || msg.message.includes('<strong') || msg.message.includes('order-receipt');
-        const messageContent = isHtmlMessage ? 
-            `<div class="message-html">${msg.message}</div>` : 
-            `<span class="message-text">${escapeHtml(msg.message).replace(/\n/g, '<br>')}</span>`;
+        const extraHtml = buildAdminReceiptControls(typeof msg.message === 'string' ? msg.message : '');
+        const messageContent = buildChatMessageContent(msg, { extraHtml }).html;
         
         return `
             <div class="chat-message ${senderClass}">
@@ -292,30 +499,133 @@ function renderMessages(messages) {
         `;
     }).join('');
 
+    bindAdminReceiptControls();
     chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
 }
 
 async function handleSendMessage() {
     const text = chatInput.value.trim();
-    if (!text) return;
+    const imageFile = chatAttachmentController?.getSelectedFile?.() || null;
+    if (!text && !imageFile) return;
 
     try {
         if (currentChatMode === 'user') {
-            await postUserChat(text);
+            await postUserChat(text || '', imageFile);
             await loadUserChat();
         } else if (currentChatMode === 'adminUser' && currentChatUserId) {
-            await postAdminChat(currentChatUserId, text);
+            await postAdminChat(currentChatUserId, text || '', imageFile);
             await loadAdminUserChat(currentChatUserId);
         } else if (currentChatMode === 'adminGuest' && currentGuestIdentifier) {
+            if (!text) return;
             await postAdminGuestChat(currentGuestIdentifier, text);
             await loadAdminGuestChat(currentGuestIdentifier);
         } else {
             return;
         }
-        chatInput.value = '';
+        chatInputAutoGrow?.reset();
+        chatAttachmentController?.clear?.();
     } catch (error) {
         console.error('Помилка при надсиланні повідомлення:', error);
         alert('Не вдалося надіслати повідомлення. Спробуйте пізніше.');
+    }
+}
+
+async function handleChatOrderStatusSave() {
+    if (!currentChatUserId || !chatOrderSelect || !chatOrderStatusSelect || !applyChatOrderStatusBtn) return;
+
+    const orderId = Number(chatOrderSelect.value);
+    const status = chatOrderStatusSelect.value;
+    const trackingNumber = chatOrderTtnInput ? chatOrderTtnInput.value.trim() : '';
+
+    if (!orderId) {
+        alert('Оберіть замовлення.');
+        return;
+    }
+
+    if (isDeliveryOrderStatus(status) && !trackingNumber) {
+        alert('Вкажіть номер ТТН для статусу доставки.');
+        if (chatOrderTtnInput) chatOrderTtnInput.focus();
+        return;
+    }
+
+    applyChatOrderStatusBtn.disabled = true;
+
+    try {
+        const result = await updateAdminOrderStatus(orderId, status, trackingNumber);
+        currentUserOrders = currentUserOrders.map(order => order.id === orderId ? {
+            ...order,
+            status: result.status,
+            tracking_number: result.tracking_number || '',
+            prepayment_received: Boolean(result.prepayment_received),
+            prepayment_amount: result.prepayment_amount
+        } : order);
+        syncChatOrderStatusSelect();
+        await loadAdminUserChat(currentChatUserId);
+        notifyChatOrderStatusUpdated(result.status, result.tracking_number || '');
+    } catch (error) {
+        console.error('Помилка оновлення статусу з чату:', error);
+        alert(error.message || 'Не вдалося оновити статус замовлення.');
+    } finally {
+        applyChatOrderStatusBtn.disabled = false;
+    }
+}
+
+async function handleReceiptPrepaymentSave(event) {
+    if (!currentChatUserId) return;
+
+    const button = event.target;
+    const tools = button.closest('.chat-receipt-admin-tools');
+    const orderId = Number(tools?.dataset.orderId);
+    const checkbox = tools?.querySelector('.chat-receipt-prepayment-checkbox');
+    const input = tools?.querySelector('.chat-receipt-prepayment-input');
+    const order = currentUserOrders.find(item => item.id === orderId);
+
+    if (!orderId || !order) {
+        alert('Не вдалося знайти замовлення для оновлення передплати.');
+        return;
+    }
+
+    const prepaymentReceived = Boolean(checkbox?.checked);
+    const prepaymentAmount = input ? input.value.trim() : '';
+
+    if (prepaymentReceived && !prepaymentAmount) {
+        alert('Вкажіть суму передплати.');
+        if (input) input.focus();
+        return;
+    }
+
+    button.disabled = true;
+
+    try {
+        const result = await updateAdminOrderStatus(
+            orderId,
+            order.status || getDefaultOrderStatus(),
+            order.tracking_number || '',
+            {
+                prepayment_received: prepaymentReceived,
+                prepayment_amount: prepaymentReceived ? prepaymentAmount : null
+            }
+        );
+
+        currentUserOrders = currentUserOrders.map(item => item.id === orderId ? {
+            ...item,
+            status: result.status,
+            tracking_number: result.tracking_number || '',
+            prepayment_received: Boolean(result.prepayment_received),
+            prepayment_amount: result.prepayment_amount
+        } : item);
+
+        syncChatOrderStatusSelect();
+        await loadAdminUserChat(currentChatUserId);
+
+        if (typeof showNotification === 'function') {
+            showNotification('Передплату збережено.', 'Успіх', 'success', 3000);
+        }
+    } catch (error) {
+        console.error('Помилка оновлення передплати з чату:', error);
+        alert(error.message || 'Не вдалося зберегти передплату.');
+    } finally {
+        button.disabled = false;
     }
 }
 

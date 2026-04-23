@@ -16,6 +16,10 @@ let bannerAreaStart = { x: 0, y: 0 };
 let bannerAreaBox = null;
 let bannerPreviewImg = null;
 
+let allRegisteredOrders = [];
+let allGuestOrders = [];
+let allBackups = [];
+
 function renderProductImagePreview() {
     const preview = document.getElementById('productImagePreview');
     preview.innerHTML = '';
@@ -266,11 +270,6 @@ function initAdminBottomPanelButtons() {
     }
 }
 
-// Повернутися на сайт
-document.getElementById('backToSiteBtn').onclick = () => {
-    window.location.href = '/';
-};
-
 function getCart() {
     try {
         const data = localStorage.getItem('cart');
@@ -279,6 +278,11 @@ function getCart() {
         console.error('Помилка читання кошика:', error);
         return [];
     }
+}
+
+function formatPrice(value) {
+    const number = Number(value) || 0;
+    return `ГРН. ${number.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
 }
 
 function saveCart(cart) {
@@ -334,23 +338,29 @@ function renderCart() {
         return;
     }
     const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const formattedTotal = formatPrice(total);
+
     cartItemsContainer.innerHTML = cart.map(item => `
-        <div class="cart-item" style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem; padding:0.75rem; border-bottom:1px solid #e9ecef;">
-            <div style="display:flex; align-items:center; gap:0.75rem; flex:1; min-width:0;">
-                ${item.image ? `<img src="${item.image}" alt="${item.name}" style="width:50px; height:50px; object-fit:cover; border-radius:6px;">` : ''}
-                <div style="min-width:0;">
-                    <strong style="display:block; white-space: nowrap; overflow:hidden; text-overflow:ellipsis;">${item.name}</strong>
-                    <span>${item.quantity} × ${item.price} грн</span>
+        <div class="cart-item">
+            ${item.image ? `<img src="${item.image}" alt="${item.name}">` : ''}
+            <div class="cart-item-info">
+                <strong onclick="window.open('product.html?id=${item.id}', '_blank')" style="cursor: pointer;">${item.name}</strong>
+                <div class="cart-item-meta">
+                    <span class="cart-item-quantity">Кількість ${item.quantity}</span>
+                    <span class="cart-item-price">${formatPrice(item.price)}</span>
                 </div>
             </div>
-            <div style="display:flex; gap:0.35rem; align-items:center;">
-                <button class="cart-action-btn" type="button" onclick="changeCartQuantity(${item.id}, -1)">-</button>
-                <button class="cart-action-btn" type="button" onclick="changeCartQuantity(${item.id}, 1)">+</button>
-                <button class="cart-action-btn delete-btn" type="button" onclick="removeFromCart(${item.id})">Видалити</button>
+            <div class="cart-item-actions">
+                <div class="count-controls">
+                    <button type="button" onclick="changeCartQuantity(${item.id}, -1)">−</button>
+                    <span class="cart-quantity">${item.quantity}</span>
+                    <button type="button" onclick="changeCartQuantity(${item.id}, 1)">+</button>
+                </div>
+                <button class="remove-button" type="button" onclick="removeFromCart(${item.id})">×</button>
             </div>
         </div>
     `).join('');
-    cartSummary.textContent = `Загальна сума: ${total} грн`;
+    cartSummary.textContent = formattedTotal;
 }
 
 function initCartModal() {
@@ -391,8 +401,12 @@ function showSection(sectionName) {
         loadCategories();
     } else if (sectionName === 'products') {
         loadProducts();
+    } else if (sectionName === 'orders') {
+        loadOrders();
     } else if (sectionName === 'banners') {
         loadBannersAdmin();
+    } else if (sectionName === 'backups') {
+        loadBackups();
     } else if (sectionName === 'dashboard') {
         loadDashboard();
     }
@@ -412,7 +426,582 @@ async function loadDashboard() {
     }
 }
 
+function formatBackupSize(sizeBytes) {
+    const size = Number(sizeBytes || 0);
+    if (size >= 1024 * 1024 * 1024) {
+        return `${(size / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+    }
+    if (size >= 1024 * 1024) {
+        return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+    }
+    if (size >= 1024) {
+        return `${(size / 1024).toFixed(1)} KB`;
+    }
+    return `${size} B`;
+}
+
+function formatBackupDate(value) {
+    if (!value) return '-';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString('uk-UA');
+}
+
+function parseUtcDate(value) {
+    if (!value) return null;
+
+    let date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        date = new Date(value.endsWith('Z') ? value : `${value}Z`);
+    }
+
+    if (Number.isNaN(date.getTime())) {
+        return null;
+    }
+
+    return date;
+}
+
+function formatOrderCreatedAt(value) {
+    const date = parseUtcDate(value);
+    if (!date) {
+        return value || '';
+    }
+
+    return date.toLocaleString('uk-UA', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Europe/Kyiv'
+    });
+}
+
+function setBackupStatus(message, type = 'success') {
+    const statusNode = document.getElementById('backupStatus');
+    if (!statusNode) return;
+
+    statusNode.textContent = message;
+    statusNode.className = `backup-status ${type}`;
+    statusNode.style.display = 'block';
+}
+
+function renderBackupCards(backups) {
+    const listNode = document.getElementById('backupsList');
+    if (!listNode) return;
+
+    if (!backups.length) {
+        listNode.innerHTML = '<p class="empty-message">Р РµР·РµСЂРІРЅРёС… РєРѕРїС–Р№ С‰Рµ РЅРµРјР°С”.</p>';
+        return;
+    }
+
+    listNode.innerHTML = backups.map(backup => {
+        const manifest = backup.manifest || {};
+        const entities = manifest.entities || {};
+        const uploads = manifest.uploads || {};
+
+        const statItems = [
+            `РљРѕСЂРёСЃС‚СѓРІР°С‡С–: ${entities.users ?? 0}`,
+            `РўРѕРІР°СЂРё: ${entities.products ?? 0}`,
+            `РљР°С‚РµРіРѕСЂС–С—: ${entities.categories ?? 0}`,
+            `Р‘Р°РЅРµСЂРё: ${entities.banners ?? 0}`,
+            `Р—Р°РјРѕРІР»РµРЅРЅСЏ: ${(entities.orders ?? 0) + (entities.guest_orders ?? 0)}`,
+            `Р§Р°С‚Рё: ${(entities.chat_messages ?? 0) + (entities.guest_chat_messages ?? 0)}`,
+            `Р¤Р°Р№Р»Рё: ${uploads.files_count ?? 0}`
+        ];
+
+        return `
+            <div class="backup-card">
+                <div class="backup-card-header">
+                    <div class="backup-card-title">${escapeAdminHtml(backup.filename)}</div>
+                </div>
+                <div class="backup-card-meta">
+                    <div><strong>РЎС‚РІРѕСЂРµРЅРѕ:</strong> ${escapeAdminHtml(formatBackupDate(manifest.created_at || backup.created_at))}</div>
+                    <div><strong>Р РѕР·РјС–СЂ:</strong> ${escapeAdminHtml(formatBackupSize(backup.size_bytes))}</div>
+                    <div><strong>Р”Р¶РµСЂРµР»Рѕ:</strong> ${escapeAdminHtml(manifest.source || 'manual')}</div>
+                    <div><strong>Р‘Р”:</strong> ${escapeAdminHtml(manifest.database?.driver || 'unknown')}</div>
+                </div>
+                <div class="backup-card-stats">
+                    ${statItems.map(item => `<span class="backup-stat-chip">${escapeAdminHtml(item)}</span>`).join('')}
+                </div>
+                <div class="backup-card-actions">
+                    <button type="button" class="btn-secondary" onclick="handleBackupDownload('${encodeURIComponent(backup.filename)}')">Р—Р°РІР°РЅС‚Р°Р¶РёС‚Рё</button>
+                    <button type="button" class="btn-danger" onclick="handleBackupRestore('${encodeURIComponent(backup.filename)}')">Р’С–РґРЅРѕРІРёС‚Рё</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function loadBackups() {
+    const listNode = document.getElementById('backupsList');
+    if (!listNode) return;
+
+    listNode.innerHTML = '<p class="empty-message">Р—Р°РІР°РЅС‚Р°Р¶РµРЅРЅСЏ СЂРµР·РµСЂРІРЅРёС… РєРѕРїС–Р№...</p>';
+
+    try {
+        allBackups = await getAdminBackups();
+        renderBackupCards(allBackups);
+    } catch (error) {
+        console.error('Backup loading error:', error);
+        listNode.innerHTML = `<p class="empty-message">${escapeAdminHtml(error.message || 'РќРµ РІРґР°Р»РѕСЃСЏ Р·Р°РІР°РЅС‚Р°Р¶РёС‚Рё СЂРµР·РµСЂРІРЅС– РєРѕРїС–С—.')}</p>`;
+    }
+}
+
+async function handleBackupDownload(encodedFilename) {
+    try {
+        const filename = decodeURIComponent(encodedFilename);
+        const result = await downloadAdminBackup(filename);
+        const downloadUrl = window.URL.createObjectURL(result.blob);
+        const anchor = document.createElement('a');
+        anchor.href = downloadUrl;
+        anchor.download = result.filename || filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+        alert(`РџРѕРјРёР»РєР° Р·Р°РІР°РЅС‚Р°Р¶РµРЅРЅСЏ: ${error.message}`);
+    }
+}
+
+async function createBackupAndRefresh() {
+    try {
+        setBackupStatus('РЎС‚РІРѕСЂСЋС”РјРѕ СЂРµР·РµСЂРІРЅСѓ РєРѕРїС–СЋ...', 'success');
+        const backup = await createAdminBackup();
+        setBackupStatus(`Р РµР·РµСЂРІРЅСѓ РєРѕРїС–СЋ ${backup.filename} СѓСЃРїС–С€РЅРѕ СЃС‚РІРѕСЂРµРЅРѕ.`, 'success');
+        await loadBackups();
+    } catch (error) {
+        setBackupStatus(error.message || 'РќРµ РІРґР°Р»РѕСЃСЏ СЃС‚РІРѕСЂРёС‚Рё СЂРµР·РµСЂРІРЅСѓ РєРѕРїС–СЋ.', 'error');
+    }
+}
+
+async function handleBackupRestore(encodedFilename) {
+    const filename = decodeURIComponent(encodedFilename);
+    const confirmed = window.confirm(`Р’С–РґРЅРѕРІРёС‚Рё СЃР°Р№С‚ Р· СЂРµР·РµСЂРІРЅРѕС— РєРѕРїС–С— ${filename}? ПоточнС– РґР°РЅС– Р±СѓРґСѓС‚СЊ Р·Р°РјС–РЅРµРЅС–.`);
+    if (!confirmed) return;
+
+    try {
+        setBackupStatus(`Р’С–РґРЅРѕРІР»СЋС”РјРѕ РґР°РЅС– Р· ${filename}...`, 'success');
+        const result = await restoreAdminBackup(filename);
+        const restorePoint = result.restore_point?.filename ? ` РўРѕС‡РєР° РІС–РґРєР°С‚Сѓ: ${result.restore_point.filename}.` : '';
+        setBackupStatus(`Р’С–РґРЅРѕРІР»РµРЅРЅСЏ Р·Р°РІРµСЂС€РµРЅРѕ.${restorePoint}`, 'success');
+        await loadBackups();
+    } catch (error) {
+        setBackupStatus(error.message || 'РќРµ РІРґР°Р»РѕСЃСЏ РІС–РґРЅРѕРІРёС‚Рё Р±РµРєР°Рї.', 'error');
+    }
+}
+
+async function restoreBackupFromUploadedFile() {
+    const input = document.getElementById('restoreBackupFile');
+    const file = input?.files?.[0];
+
+    if (!file) {
+        alert('РћР±РµСЂС–С‚СЊ ZIP-С„Р°Р№Р» Р· СЂРµР·РµСЂРІРЅРѕСЋ РєРѕРїС–С”СЋ.');
+        return;
+    }
+
+    const confirmed = window.confirm(`Р’С–РґРЅРѕРІРёС‚Рё СЃР°Р№С‚ Р· С„Р°Р№Р»Сѓ ${file.name}? ПоточнС– РґР°РЅС– Р±СѓРґСѓС‚СЊ Р·Р°РјС–РЅРµРЅС–.`);
+    if (!confirmed) return;
+
+    try {
+        setBackupStatus(`Р—Р°РІР°РЅС‚Р°Р¶СѓС”РјРѕ С‚Р° РІС–РґРЅРѕРІР»СЋС”РјРѕ ${file.name}...`, 'success');
+        const result = await restoreAdminBackupFromFile(file);
+        input.value = '';
+        const restorePoint = result.restore_point?.filename ? ` РўРѕС‡РєР° РІС–РґРєР°С‚Сѓ: ${result.restore_point.filename}.` : '';
+        setBackupStatus(`Р’С–РґРЅРѕРІР»РµРЅРЅСЏ Р· Р·Р°РІР°РЅС‚Р°Р¶РµРЅРѕРіРѕ С„Р°Р№Р»Сѓ Р·Р°РІРµСЂС€РµРЅРѕ.${restorePoint}`, 'success');
+        await loadBackups();
+    } catch (error) {
+        setBackupStatus(error.message || 'РќРµ РІРґР°Р»РѕСЃСЏ РІС–РґРЅРѕРІРёС‚Рё Р±РµРєР°Рї Р· С„Р°Р№Р»Сѓ.', 'error');
+    }
+}
+
+function renderRegisteredOrders(orders) {
+    const registeredContainer = document.getElementById('registeredOrdersList');
+    registeredContainer.innerHTML = orders.length
+        ? orders.map(order => renderOrderCard(order, false)).join('')
+        : '<p class="empty-message">Поки немає зареєстрованих замовлень.</p>';
+    bindOrderStatusControls();
+}
+
+function renderGuestOrders(orders) {
+    const guestContainer = document.getElementById('guestOrdersList');
+    guestContainer.innerHTML = orders.length
+        ? orders.map(order => renderOrderCard(order, true)).join('')
+        : '<p class="empty-message">Поки немає гостьових замовлень.</p>';
+    bindOrderStatusControls();
+}
+
+function filterRegisteredOrders() {
+    const searchTerm = document.getElementById('registeredOrdersSearch').value.trim().toLowerCase();
+    if (!searchTerm) {
+        renderRegisteredOrders(allRegisteredOrders);
+        return;
+    }
+    const filtered = allRegisteredOrders.filter(order => 
+        order.order_number && order.order_number.toLowerCase().includes(searchTerm)
+    );
+    renderRegisteredOrders(filtered);
+}
+
+function filterGuestOrders() {
+    const searchTerm = document.getElementById('guestOrdersSearch').value.trim().toLowerCase();
+    if (!searchTerm) {
+        renderGuestOrders(allGuestOrders);
+        return;
+    }
+    const filtered = allGuestOrders.filter(order => 
+        order.order_number && order.order_number.toLowerCase().includes(searchTerm)
+    );
+    renderGuestOrders(filtered);
+}
+
+function formatAdminPrice(value) {
+    if (value === null || value === undefined) return '0 грн.';
+    return Number(value).toLocaleString('uk-UA') + ' грн.';
+}
+
+function getAdminDueAmount(order) {
+    const total = Number(order.total_price || 0);
+    const prepayment = order.prepayment_received ? Number(order.prepayment_amount || 0) : 0;
+    return Math.max(total - prepayment, 0);
+}
+
+function escapeAdminHtml(value) {
+    const div = document.createElement('div');
+    div.textContent = value === null || value === undefined ? '' : String(value);
+    return div.innerHTML;
+}
+
+function getOrderStatusOptions(selectedStatus) {
+    const statuses = [
+        'Замовлення очікує підтвердження менеджером',
+        'Замовлення очікує на передплату',
+        'Замовлення прийнято, очікуйте номер ТТН',
+        'Передплата підтверджена та замовлення прийнято. Очікуйте номер ТТН',
+        'Оплата підтверджена та замовлення прийнято. Очікуйте номер ТТН',
+        'Замовлення у процесі доставки',
+        'Замовлення очікує Вас на пошті!',
+        'Отримано',
+        'Відмова'
+    ];
+
+    return statuses.map(status => `
+        <option value="${status}" ${status === selectedStatus ? 'selected' : ''}>${status}</option>
+    `).join('');
+}
+
+function isDeliveryOrderStatus(status) {
+    return status === 'Замовлення у процесі доставки';
+}
+
+function parseOrderItems(itemsData) {
+    let items = [];
+    try {
+        items = typeof itemsData === 'string' ? JSON.parse(itemsData) : itemsData;
+    } catch (error) {
+        items = [];
+    }
+
+    return Array.isArray(items) ? items : [];
+}
+
+function formatAdminDeliveryMethod(order) {
+    if (order.delivery_method === 'postal') {
+        return `Пошта, відділення ${order.postal_branch_number || '—'}`;
+    }
+
+    if (order.delivery_method === 'courier') {
+        return 'Кур’єр';
+    }
+
+    if (order.delivery_method === 'nova_branch') {
+        return `Доставка у відділення Нової пошти (${order.postal_branch_number || '—'})`;
+    }
+
+    if (order.delivery_method === 'nova_locker') {
+        return `Доставка у поштомат Нової пошти (${order.postal_branch_number || '—'})`;
+    }
+
+    if (order.delivery_method === 'nova_courier') {
+        return `Доставка кур'єром Нової пошти (${order.postal_branch_number || '—'})`;
+    }
+
+    if (order.delivery_method === 'other_post') {
+        return `Доставка іншою поштою (${order.postal_branch_number || '—'})`;
+    }
+
+    return order.delivery_method || 'Не вказано';
+}
+
+function formatAdminPaymentMethod(method) {
+    if (method === 'cod') return 'Накладений платіж';
+    if (method === 'card') return 'Оплата карткою';
+    return method || 'Не вказано';
+}
+
+function buildAdminOrderReceipt(order, isGuest = false) {
+    const items = parseOrderItems(order.items_data);
+    if (!items.length) {
+        return '<div class="order-items-empty">Немає товарів</div>';
+    }
+
+    const orderNumber = escapeAdminHtml(order.order_number || `Замовлення #${order.id}`);
+    const customerName = escapeAdminHtml(isGuest ? (order.guest_name || 'Не вказано') : (order.recipient_name || 'Не вказано'));
+    const customerPhone = escapeAdminHtml(isGuest ? (order.guest_phone || 'Не вказано') : (order.recipient_phone || 'Не вказано'));
+    const customerCity = escapeAdminHtml(isGuest ? (order.guest_city || 'Не вказано') : (order.recipient_city || 'Не вказано'));
+    const deliveryText = escapeAdminHtml(formatAdminDeliveryMethod(order));
+    const paymentText = escapeAdminHtml(formatAdminPaymentMethod(order.payment_method));
+    const trackingNumber = escapeAdminHtml(order.tracking_number || '');
+    const prepaymentAmount = order.prepayment_received ? Number(order.prepayment_amount || 0) : 0;
+    const dueAmount = getAdminDueAmount(order);
+    const customerTypeLabel = isGuest ? 'Гостьове замовлення' : 'Замовлення користувача';
+    const customerExtraLine = isGuest
+        ? ''
+        : `<div>Email: ${escapeAdminHtml(order.user_email || 'Не вказано')}</div>`;
+
+    const itemsHtml = items.map(item => {
+        const quantity = Number(item.quantity || 0);
+        const price = Number(item.price || 0);
+        const lineTotal = quantity * price;
+        const name = escapeAdminHtml(item.name || 'Товар');
+        const hasLink = item.id !== null && item.id !== undefined && item.id !== '';
+        const productUrl = hasLink ? `/product.html?id=${encodeURIComponent(item.id)}` : '';
+        const imageHtml = item.image
+            ? `<a class="order-receipt-link" href="${hasLink ? escapeAdminHtml(productUrl) : '#'}" ${hasLink ? 'target="_blank" rel="noopener noreferrer"' : ''}><img class="order-receipt-img" src="${escapeAdminHtml(item.image)}" alt="${name}"></a>`
+            : '';
+        const titleHtml = hasLink
+            ? `<a class="order-receipt-link" href="${escapeAdminHtml(productUrl)}" target="_blank" rel="noopener noreferrer">${name}</a>`
+            : name;
+
+        return `
+            <div class="order-receipt-item">
+                ${imageHtml}
+                <div class="order-receipt-item-content">
+                    <div class="order-receipt-item-title">${titleHtml}</div>
+                    <div class="order-receipt-item-meta">${quantity} × ${formatAdminPrice(price)}</div>
+                </div>
+                <div class="order-receipt-item-price">${formatAdminPrice(lineTotal)}</div>
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <div class="order-receipt">
+            <div class="order-receipt-header">${customerTypeLabel} № ${orderNumber}</div>
+            <div class="order-receipt-meta">
+                <div>Телефон: ${customerPhone}</div>
+                <div>Ім'я: ${customerName}</div>
+                ${customerExtraLine}
+                <div>Місто: ${customerCity}</div>
+                <div>Доставка: ${deliveryText}</div>
+                <div>Оплата: ${paymentText}</div>
+                ${trackingNumber ? `<div><strong>ТТН:</strong> ${trackingNumber}</div>` : ''}
+            </div>
+            <div class="order-receipt-items">
+                ${itemsHtml}
+            </div>
+            <div class="order-receipt-total">
+                <span class="order-receipt-summary-row">
+                    <span>Загальна сума:</span>
+                    <strong>${formatAdminPrice(order.total_price)}</strong>
+                </span>
+                ${prepaymentAmount > 0 ? `
+                    <span class="order-receipt-summary-row">
+                        <span>Передплата:</span>
+                        <strong>${formatAdminPrice(prepaymentAmount)}</strong>
+                    </span>
+                ` : ''}
+                <span class="order-receipt-summary-row">
+                    <span>До сплати:</span>
+                    <strong>${formatAdminPrice(dueAmount)}</strong>
+                </span>
+            </div>
+        </div>
+    `;
+}
+
+function renderOrderCard(order, isGuest = false) {
+    const createdAt = formatOrderCreatedAt(order.created_at);
+    const currentStatus = order.status || 'Замовлення очікує підтвердження менеджером';
+    const trackingNumber = order.tracking_number || '';
+    const prepaymentReceived = Boolean(order.prepayment_received);
+    const prepaymentAmount = prepaymentReceived ? Number(order.prepayment_amount || 0) : '';
+
+    return `
+        <div class="order-card">
+            <div class="order-card-header">
+                <div class="order-label">${isGuest ? 'Гостьове замовлення' : 'Замовлення'}</div>
+                <div class="order-number">${escapeAdminHtml(order.order_number || '—')}</div>
+            </div>
+            <div class="admin-order-layout">
+                <div class="admin-order-receipt-wrap">
+                    ${buildAdminOrderReceipt(order, isGuest)}
+                </div>
+                <div class="admin-order-side">
+                    <div class="admin-order-side-block">
+                        <div class="admin-order-side-title">Керування замовленням</div>
+                        <div class="admin-order-side-meta"><strong>Дата:</strong> ${escapeAdminHtml(createdAt)}</div>
+                        <div class="order-status-control">
+                            <strong>Статус:</strong>
+                            <select class="order-status-select" data-order-id="${order.id}" data-order-type="${isGuest ? 'guest' : 'registered'}">
+                                ${getOrderStatusOptions(currentStatus)}
+                            </select>
+                            <div class="order-ttn-control" style="${isDeliveryOrderStatus(currentStatus) ? '' : 'display:none;'}">
+                                <input type="text" class="order-ttn-input" value="${escapeAdminHtml(trackingNumber)}" placeholder="ТТН">
+                            </div>
+                            <label class="order-prepayment-toggle">
+                                <input type="checkbox" class="order-prepayment-checkbox" ${prepaymentReceived ? 'checked' : ''}>
+                                <span>Передплата отримана</span>
+                            </label>
+                            <div class="order-prepayment-control" style="${prepaymentReceived ? '' : 'display:none;'}">
+                                <input type="number" min="0" step="0.01" class="order-prepayment-input" value="${escapeAdminHtml(prepaymentAmount)}" placeholder="Сума передплати">
+                            </div>
+                            <button type="button" class="btn-edit order-status-save-btn" data-order-id="${order.id}" data-order-type="${isGuest ? 'guest' : 'registered'}">Зберегти статус</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+async function loadOrders() {
+    try {
+        const [orders, guestOrders] = await Promise.all([getAllOrders(), getAdminGuestOrders()]);
+        allRegisteredOrders = orders;
+        allGuestOrders = guestOrders;
+        document.getElementById('registeredOrdersCount').textContent = orders.length;
+        document.getElementById('guestOrdersCount').textContent = guestOrders.length;
+
+        renderRegisteredOrders(orders);
+        renderGuestOrders(guestOrders);
+        bindOrderStatusControls();
+    } catch (error) {
+        console.error('Помилка завантаження замовлень:', error);
+        document.getElementById('registeredOrdersList').innerHTML = '<p class="empty-message">Не вдалося завантажити зареєстровані замовлення.</p>';
+        document.getElementById('guestOrdersList').innerHTML = '<p class="empty-message">Не вдалося завантажити гостьові замовлення.</p>';
+    }
+}
+
 // Загрузить категории
+async function handleOrderStatusChange(event) {
+    const select = event.target;
+    const statusControl = select.closest('.order-status-control');
+    const ttnControl = statusControl?.querySelector('.order-ttn-control');
+    if (ttnControl) {
+        ttnControl.style.display = isDeliveryOrderStatus(select.value) ? '' : 'none';
+    }
+}
+
+function handlePrepaymentToggle(event) {
+    const checkbox = event.target;
+    const statusControl = checkbox.closest('.order-status-control');
+    const prepaymentControl = statusControl?.querySelector('.order-prepayment-control');
+    const prepaymentInput = statusControl?.querySelector('.order-prepayment-input');
+    if (prepaymentControl) {
+        prepaymentControl.style.display = checkbox.checked ? '' : 'none';
+    }
+    if (!checkbox.checked && prepaymentInput) {
+        prepaymentInput.value = '';
+    }
+}
+
+function bindOrderStatusControls() {
+    document.querySelectorAll('.order-status-select').forEach(select => {
+        select.dataset.previousStatus = select.value;
+        select.onchange = handleOrderStatusChange;
+    });
+
+    document.querySelectorAll('.order-prepayment-checkbox').forEach(checkbox => {
+        checkbox.onchange = handlePrepaymentToggle;
+    });
+
+    document.querySelectorAll('.order-status-save-btn').forEach(button => {
+        button.onclick = handleOrderStatusSave;
+    });
+}
+
+function notifyOrderStatusUpdated(status, trackingNumber = '') {
+    const message = isDeliveryOrderStatus(status) && trackingNumber
+        ? `Статус замовлення оновлено. ТТН ${trackingNumber} збережено.`
+        : 'Статус замовлення оновлено.';
+
+    if (typeof showNotification === 'function') {
+        showNotification(message, 'Успіх', 'success', 3000);
+        return;
+    }
+
+    alert(message);
+}
+
+async function handleOrderStatusSave(event) {
+    const button = event.target;
+    const statusControl = button.closest('.order-status-control');
+    const select = statusControl?.querySelector('.order-status-select');
+    const ttnInput = statusControl?.querySelector('.order-ttn-input');
+    const prepaymentCheckbox = statusControl?.querySelector('.order-prepayment-checkbox');
+    const prepaymentInput = statusControl?.querySelector('.order-prepayment-input');
+    if (!select) return;
+
+    const orderId = Number(button.dataset.orderId);
+    const orderType = button.dataset.orderType;
+    const status = select.value;
+    const trackingNumber = ttnInput ? ttnInput.value.trim() : '';
+    const prepaymentReceived = Boolean(prepaymentCheckbox?.checked);
+    const prepaymentAmount = prepaymentInput ? prepaymentInput.value.trim() : '';
+
+    if (isDeliveryOrderStatus(status) && !trackingNumber) {
+        alert('Вкажіть номер ТТН для статусу доставки.');
+        if (ttnInput) ttnInput.focus();
+        return;
+    }
+
+    if (prepaymentReceived && !prepaymentAmount) {
+        alert('Вкажіть суму передплати.');
+        if (prepaymentInput) prepaymentInput.focus();
+        return;
+    }
+
+    button.disabled = true;
+
+    try {
+        const payload = {
+            prepayment_received: prepaymentReceived,
+            prepayment_amount: prepaymentReceived ? prepaymentAmount : null
+        };
+
+        if (orderType === 'guest') {
+            const result = await updateAdminGuestOrderStatus(orderId, status, trackingNumber, payload);
+            allGuestOrders = allGuestOrders.map(order => order.id === orderId ? {
+                ...order,
+                status: result.status,
+                tracking_number: result.tracking_number || '',
+                prepayment_received: Boolean(result.prepayment_received),
+                prepayment_amount: result.prepayment_amount
+            } : order);
+        } else {
+            const result = await updateAdminOrderStatus(orderId, status, trackingNumber, payload);
+            allRegisteredOrders = allRegisteredOrders.map(order => order.id === orderId ? {
+                ...order,
+                status: result.status,
+                tracking_number: result.tracking_number || '',
+                prepayment_received: Boolean(result.prepayment_received),
+                prepayment_amount: result.prepayment_amount
+            } : order);
+        }
+
+        select.dataset.previousStatus = status;
+        notifyOrderStatusUpdated(status, trackingNumber);
+        await loadOrders();
+    } catch (error) {
+        console.error('Помилка оновлення статусу замовлення:', error);
+        alert(error.message || 'Не вдалося оновити статус замовлення. Спробуйте ще раз.');
+    } finally {
+        button.disabled = false;
+    }
+}
+
 async function loadCategories() {
     try {
         categories = await getCategories();
@@ -1204,6 +1793,43 @@ document.addEventListener('DOMContentLoaded', () => {
     initAdminBottomPanelButtons();
     initCartModal();
     updateCartCount();
+
+    // Обработчик поиска заказов
+    const registeredOrdersSearch = document.getElementById('registeredOrdersSearch');
+    if (registeredOrdersSearch) {
+        registeredOrdersSearch.addEventListener('input', filterRegisteredOrders);
+    }
+
+    const guestOrdersSearch = document.getElementById('guestOrdersSearch');
+    if (guestOrdersSearch) {
+        guestOrdersSearch.addEventListener('input', filterGuestOrders);
+    }
+
+    const sectionToggleButtons = document.querySelectorAll('.section-toggle');
+    sectionToggleButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const targetId = button.dataset.target;
+            const content = document.getElementById(targetId);
+            if (!content) return;
+            const collapsed = content.classList.toggle('collapsed');
+            button.textContent = collapsed ? 'Розгорнути' : 'Згорнути';
+        });
+    });
+
+    const createBackupBtn = document.getElementById('createBackupBtn');
+    if (createBackupBtn) {
+        createBackupBtn.addEventListener('click', createBackupAndRefresh);
+    }
+
+    const refreshBackupsBtn = document.getElementById('refreshBackupsBtn');
+    if (refreshBackupsBtn) {
+        refreshBackupsBtn.addEventListener('click', loadBackups);
+    }
+
+    const restoreUploadedBackupBtn = document.getElementById('restoreUploadedBackupBtn');
+    if (restoreUploadedBackupBtn) {
+        restoreUploadedBackupBtn.addEventListener('click', restoreBackupFromUploadedFile);
+    }
 
     window.onclick = (event) => {
         const addCategoryModal = document.getElementById('addCategoryModal');

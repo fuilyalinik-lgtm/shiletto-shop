@@ -34,10 +34,37 @@
                     <h2 id="chatTitle">Завантаження...</h2>
                 </div>
             </div>
+            <div id="chatOrderStatusPanel" class="chat-order-status-panel" style="display:none;">
+                <select id="chatOrderSelect" class="chat-order-select">
+                    <option value="">Оберіть замовлення</option>
+                </select>
+                <select id="chatOrderStatusSelect" class="chat-order-select">
+                    <option value="Замовлення очікує підтвердження менеджером">Замовлення очікує підтвердження менеджером</option>
+                    <option value="Замовлення очікує на передплату">Замовлення очікує на передплату</option>
+                    <option value="Замовлення прийнято, очікуйте номер ТТН">Замовлення прийнято, очікуйте номер ТТН</option>
+                    <option value="Передплата підтверджена та замовлення прийнято. Очікуйте номер ТТН">Передплата підтверджена та замовлення прийнято. Очікуйте номер ТТН</option>
+                    <option value="Оплата підтверджена та замовлення прийнято. Очікуйте номер ТТН">Оплата підтверджена та замовлення прийнято. Очікуйте номер ТТН</option>
+                    <option value="Замовлення у процесі доставки">Замовлення у процесі доставки</option>
+                    <option value="Замовлення очікує Вас на пошті!">Замовлення очікує Вас на пошті!</option>
+                    <option value="Отримано">Отримано</option>
+                    <option value="Відмова">Відмова</option>
+                </select>
+                <input id="chatOrderTtnInput" class="chat-order-select" type="text" placeholder="ТТН" style="display:none;">
+                <button id="applyChatOrderStatusBtn" class="cart-action-btn" type="button">Зберегти статус</button>
+            </div>
             <div id="chatMessages" class="chat-thread"></div>
             <div class="chat-input-panel">
-                <textarea id="chatInput" placeholder="Напишіть повідомлення..." rows="3"></textarea>
-                <button id="sendChatBtn" class="cart-action-btn">Надіслати</button>
+                <input id="chatImageInput" class="chat-image-input" type="file" accept="image/*" hidden>
+                <div id="chatImagePreview" class="chat-image-preview"></div>
+                <div class="chat-composer-row">
+                    <button id="chatAttachBtn" class="chat-attach-btn" type="button" aria-label="Прикріпити фото" title="Прикріпити фото">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                            <path d="M21.44 11.05L12.25 20.24C10.1 22.39 6.61 22.39 4.46 20.24C2.31 18.09 2.31 14.6 4.46 12.45L13.3 3.61C14.73 2.18 17.05 2.18 18.48 3.61C19.91 5.04 19.91 7.36 18.48 8.79L10.34 16.93C9.38 17.89 7.82 17.89 6.86 16.93C5.9 15.97 5.9 14.41 6.86 13.45L14.29 6.02" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                    <textarea id="chatInput" placeholder="Напишіть повідомлення..." rows="3"></textarea>
+                    <button id="sendChatBtn" class="cart-action-btn">Надіслати</button>
+                </div>
             </div>
         </section>
     </main>
@@ -45,11 +72,12 @@
     <div class="bottom-panel" id="bottomPanel">
         <button id="homeBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 9.5L12 3l9 6.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Головна</button>
         <button id="chatBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H6l-4 4V5a1 1 0 0 1 1-1z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Чат</button>
-        <button id="cartBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 6H6.21L7.25 11.4C7.32 11.79 7.63 12.08 8.02 12.11H18" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 6L3 2H1" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/><circle cx="17" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/></svg>Кошик (<span id="cartCount">0</span>)</button>
-        <button id="profileBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20C4 16.6863 6.68629 14 10 14H14C17.3137 14 20 16.6863 20 20" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Профіль</button>
+        <button id="cartBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 6H6.21L7.25 11.4C7.32 11.79 7.63 12.08 8.02 12.11H18" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 6L3 2H1" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/><circle cx="17" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/></svg><span>Кошик (<span id="cartCount">0</span>)</span></button>
+        <button id="profileBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20C4 16.6863 6.68629 14 10 14H14C17.3137 14 20 16.6863 20 20" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Мій кабінет</button>
         <button id="logoutBtnBottom"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 21H5C4.44772 21 4 20.5523 4 20V4C4 3.44772 4.44772 3 5 3H9" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 17L21 12L16 7" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12H9" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Вихід</button>
     </div>
 
+    <script src="js/notifications.js"></script>
     <script src="js/api.js"></script>
     <script src="js/chat.js"></script>
 </body>

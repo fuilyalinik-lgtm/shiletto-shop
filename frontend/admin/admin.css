@@ -173,6 +173,213 @@
     color: #007bff;
 }
 
+.backup-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.backup-note {
+    padding: 0.9rem 1rem;
+    margin-bottom: 1rem;
+    border-radius: 10px;
+    background: #f4f8ff;
+    color: #355070;
+    line-height: 1.5;
+}
+
+.backup-restore-panel {
+    display: grid;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    border: 1px solid #e0e7ef;
+    border-radius: 12px;
+    background: #fbfcfe;
+}
+
+.backup-status {
+    padding: 0.85rem 1rem;
+    border-radius: 10px;
+    margin-bottom: 1rem;
+    line-height: 1.5;
+}
+
+.backup-status.success {
+    background: #eaf8ee;
+    color: #1f6b3b;
+}
+
+.backup-status.error {
+    background: #fdeceb;
+    color: #a3342f;
+}
+
+.backups-list {
+    display: grid;
+    gap: 1rem;
+}
+
+.backup-card {
+    border: 1px solid #e6ebf2;
+    border-radius: 14px;
+    padding: 1rem;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.backup-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.backup-card-title {
+    font-weight: 700;
+    color: #1f2937;
+    word-break: break-word;
+}
+
+.backup-card-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.5rem 1rem;
+    margin-bottom: 0.85rem;
+    color: #4b5563;
+    font-size: 0.95rem;
+}
+
+.backup-card-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.9rem;
+}
+
+.backup-stat-chip {
+    padding: 0.35rem 0.6rem;
+    border-radius: 999px;
+    background: #f3f4f6;
+    color: #374151;
+    font-size: 0.85rem;
+}
+
+.backup-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.order-list-group {
+    margin-top: 1rem;
+}
+
+.order-card {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.order-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.order-label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #333;
+}
+
+.order-number {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #007bff;
+}
+
+.order-card-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.5rem 1rem;
+    font-size: 0.9rem;
+    color: #444;
+    margin-bottom: 0.75rem;
+}
+
+.order-details summary {
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.order-items-list {
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
+.order-items-list li {
+    margin-bottom: 0.35rem;
+}
+
+.order-items-empty,
+.empty-message {
+    color: #666;
+    padding: 0.75rem 0;
+}
+
+#registeredOrdersSearch {
+    font-size: 0.9rem;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    padding: 0.5rem;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+#registeredOrdersSearch:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.section-toggle {
+    background: transparent;
+    border: 1px solid #007bff;
+    color: #007bff;
+    border-radius: 8px;
+    padding: 0.45rem 0.9rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.2s, color 0.2s;
+}
+
+.section-toggle:hover {
+    background: #007bff;
+    color: white;
+}
+
+.order-list-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.order-list-content.collapsed {
+    display: none;
+}
+
 .btn-primary {
     background: #007bff;
     color: white;
@@ -201,6 +408,21 @@
 
 .btn-secondary:hover {
     background: #545b62;
+}
+
+.btn-danger {
+    background: #c0392b;
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 10px;
+    cursor: pointer;
+    margin-bottom: 1rem;
+    font-weight: 500;
+}
+
+.btn-danger:hover {
+    background: #962d22;
 }
 
 table {
@@ -331,4 +553,128 @@ tr:hover {
 
 .image-gallery input[type="radio"]:checked + img {
     border-color: #007bff;
+}
+
+.order-status-control {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.order-status-select {
+    width: 100%;
+    min-height: 42px;
+    border: 1px solid #cfd8e3;
+    border-radius: 10px;
+    padding: 0.55rem 0.7rem;
+    background: #fff;
+    font: inherit;
+}
+
+.order-ttn-control {
+    margin-top: 0.35rem;
+}
+
+.order-ttn-input {
+    width: 100%;
+    min-height: 42px;
+    border: 1px solid #cfd8e3;
+    border-radius: 10px;
+    padding: 0.55rem 0.7rem;
+    background: #fff;
+    font: inherit;
+}
+
+.order-status-save-btn {
+    margin-top: 0.4rem;
+}
+
+.order-prepayment-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    color: #223046;
+    font-size: 0.93rem;
+    margin-top: 0.15rem;
+}
+
+.order-prepayment-toggle input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    flex: 0 0 auto;
+}
+
+.order-prepayment-control {
+    margin-top: 0.35rem;
+}
+
+.order-prepayment-input {
+    width: 100%;
+    min-height: 42px;
+    border: 1px solid #cfd8e3;
+    border-radius: 10px;
+    padding: 0.55rem 0.7rem;
+    background: #fff;
+    font: inherit;
+}
+
+.admin-order-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.95fr);
+    gap: 1rem;
+    align-items: start;
+}
+
+.admin-order-receipt-wrap .order-receipt {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+}
+
+.admin-order-side {
+    min-width: 0;
+}
+
+.admin-order-side-block {
+    background: #ffffff;
+    border: 1px solid #e5ebf1;
+    border-radius: 14px;
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.admin-order-side-title {
+    font-size: 0.98rem;
+    font-weight: 700;
+    color: #223046;
+    margin-bottom: 0.75rem;
+}
+
+.admin-order-side-meta {
+    color: #4b5563;
+    font-size: 0.92rem;
+    margin-bottom: 0.85rem;
+}
+
+.admin-order-receipt-wrap .order-receipt-header {
+    margin-bottom: 0.6rem;
+}
+
+.admin-order-receipt-wrap .order-receipt-meta {
+    margin-bottom: 0.25rem;
+}
+
+.admin-order-receipt-wrap .order-receipt-meta > div {
+    margin-bottom: 0.2rem;
+}
+
+.admin-order-receipt-wrap .order-receipt-items {
+    margin-top: 0.55rem;
+}
+
+@media (max-width: 960px) {
+    .admin-order-layout {
+        grid-template-columns: 1fr;
+    }
 }

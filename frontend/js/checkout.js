@@ -13,25 +13,76 @@ const backBtn = document.getElementById('backBtn');
 const recipientPhoneInput = document.getElementById('recipientPhone');
 const recipientNameInput = document.getElementById('recipientName');
 const recipientCityInput = document.getElementById('recipientCity');
+const recipientCityCombobox = document.getElementById('recipientCityCombobox');
+const recipientCityOptions = document.getElementById('recipientCityOptions');
+const recipientCityEmpty = document.getElementById('recipientCityEmpty');
 const deliveryMethodSelect = document.getElementById('deliveryMethod');
+const deliveryMethodCombobox = document.getElementById('deliveryMethodCombobox');
+const deliveryMethodTrigger = document.getElementById('deliveryMethodTrigger');
+const deliveryMethodValue = document.getElementById('deliveryMethodValue');
+const deliveryMethodOptions = document.getElementById('deliveryMethodOptions');
 const postalBranchInput = document.getElementById('postalBranchNumber');
 const postalFieldGroup = document.getElementById('postalFieldGroup');
+const postalBranchLabel = document.getElementById('postalBranchLabel');
 const paymentMethodSelect = document.getElementById('paymentMethod');
+const paymentMethodCombobox = document.getElementById('paymentMethodCombobox');
+const paymentMethodTrigger = document.getElementById('paymentMethodTrigger');
+const paymentMethodValue = document.getElementById('paymentMethodValue');
+const paymentMethodOptions = document.getElementById('paymentMethodOptions');
+const paymentDeliveryNote = document.getElementById('paymentDeliveryNote');
 const notesTextarea = document.getElementById('notes');
 const orderReceiptItemsDiv = document.getElementById('orderReceiptItems');
 const orderReceiptTotalSpan = document.getElementById('orderReceiptTotal');
+const checkoutAuthNoticeDiv = document.getElementById('checkoutAuthNotice');
 const registerLink = document.getElementById('registerLink');
-const registerModal = document.getElementById('registerModal');
-const closeRegisterModalBtn = document.getElementById('closeRegisterModal');
-const registerForm = document.getElementById('registerForm');
+const loginModal = document.getElementById('loginModal');
+const closeLoginModalBtn = document.getElementById('closeLoginModal');
+const loginForm = document.getElementById('loginForm');
 const regUsernameInput = document.getElementById('regUsername');
-const regEmailInput = document.getElementById('regEmail');
-const regPasswordInput = document.getElementById('regPassword');
+const loginEmailInput = document.getElementById('loginEmail');
+const loginPasswordInput = document.getElementById('loginPassword');
+const verificationCodeInput = document.getElementById('regVerificationCode');
+const registerStatusText = document.getElementById('registerStatusText');
 const registerFeedback = document.getElementById('registerFeedback');
+const googleLoginBtn = document.getElementById('googleLoginBtn');
+const switchLink = document.getElementById('switchLink');
 
 let checkoutAuthToken = localStorage.getItem('auth_token');
 let isGuest = !checkoutAuthToken;
 let guestIdentifier = localStorage.getItem('guestIdentifier') || generateGuestIdentifier();
+let isRegisterMode = false;
+let isVerificationStep = false;
+let pendingRegistrationEmail = '';
+let isPasswordResetMode = false;
+let passwordResetStep = '';
+let pendingPasswordResetEmail = '';
+let pendingPasswordResetToken = '';
+const CITY_OPTIONS = [
+    'Київ',
+    'Вінниця',
+    'Луцьк',
+    'Дніпро',
+    'Житомир',
+    'Ужгород',
+    'Запоріжжя',
+    'Івано-Франківськ',
+    'Кропивницький',
+    'Львів',
+    'Миколаїв',
+    'Одеса',
+    'Полтава',
+    'Рівне',
+    'Суми',
+    'Тернопіль',
+    'Харків',
+    'Херсон',
+    'Хмельницький',
+    'Черкаси',
+    'Чернівці',
+    'Чернігів'
+];
+let filteredCityOptions = [...CITY_OPTIONS];
+let activeCityIndex = -1;
 
 // ===== HELPER ФУНКЦИИ =====
 function generateGuestIdentifier() {
@@ -49,8 +100,9 @@ function showError(message) {
 }
 
 function showSuccess(message) {
-    successMessageDiv.textContent = message;
+    successMessageDiv.innerHTML = message;
     successMessageDiv.style.display = 'block';
+    successMessageDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function escapeHtml(text) {
@@ -65,6 +117,359 @@ function formatPrice(value) {
     return number.toLocaleString('uk-UA') + ' грн';
 }
 
+function normalizeCityValue(value) {
+    return String(value || '')
+        .trim()
+        .toLocaleLowerCase('uk-UA')
+        .replace(/['`’ʼ-]/g, '');
+}
+
+function openCityCombobox() {
+    if (!recipientCityCombobox) return;
+    recipientCityCombobox.classList.add('open');
+}
+
+function closeCityCombobox() {
+    if (!recipientCityCombobox) return;
+    recipientCityCombobox.classList.remove('open');
+    activeCityIndex = -1;
+}
+
+function closePickerCombobox(combobox, trigger) {
+    if (!combobox) return;
+    combobox.classList.remove('open');
+    if (trigger) {
+        trigger.setAttribute('aria-expanded', 'false');
+    }
+}
+
+function closeOtherPickerComboboxes(exceptCombobox = null) {
+    document.querySelectorAll('.picker-combobox.open').forEach((combobox) => {
+        if (combobox !== exceptCombobox) {
+            const trigger = combobox.querySelector('.picker-combobox-trigger');
+            closePickerCombobox(combobox, trigger);
+        }
+    });
+}
+
+function applyCityValue(cityName) {
+    if (!recipientCityInput) return;
+
+    recipientCityInput.value = cityName;
+    saveCheckoutFormState();
+    renderCityOptions(recipientCityInput.value);
+    closeCityCombobox();
+}
+
+function updateActiveCityOption() {
+    if (!recipientCityOptions) return;
+
+    const optionButtons = recipientCityOptions.querySelectorAll('.city-option');
+    optionButtons.forEach((button, index) => {
+        button.classList.toggle('is-active', index === activeCityIndex);
+    });
+}
+
+function renderCityOptions(query = '') {
+    if (!recipientCityOptions || !recipientCityEmpty) return;
+
+    const normalizedQuery = normalizeCityValue(query);
+    filteredCityOptions = CITY_OPTIONS.filter((city) => {
+        const normalizedCity = normalizeCityValue(city);
+        return !normalizedQuery || normalizedCity.includes(normalizedQuery);
+    });
+
+    activeCityIndex = filteredCityOptions.length ? 0 : -1;
+    recipientCityOptions.innerHTML = filteredCityOptions.map((city, index) => `
+        <button type="button" class="city-option${index === activeCityIndex ? ' is-active' : ''}" data-city="${escapeHtml(city)}">
+            ${escapeHtml(city)}
+        </button>
+    `).join('');
+
+    recipientCityEmpty.classList.toggle('visible', filteredCityOptions.length === 0);
+}
+
+function handleCityComboboxKeydown(event) {
+    if (!recipientCityCombobox?.classList.contains('open')) {
+        if (event.key === 'ArrowDown') {
+            openCityCombobox();
+            renderCityOptions(recipientCityInput?.value || '');
+            event.preventDefault();
+        }
+        return;
+    }
+
+    if (event.key === 'Escape') {
+        closeCityCombobox();
+        return;
+    }
+
+    if (!filteredCityOptions.length) {
+        return;
+    }
+
+    if (event.key === 'ArrowDown') {
+        activeCityIndex = (activeCityIndex + 1) % filteredCityOptions.length;
+        updateActiveCityOption();
+        event.preventDefault();
+    }
+
+    if (event.key === 'ArrowUp') {
+        activeCityIndex = (activeCityIndex - 1 + filteredCityOptions.length) % filteredCityOptions.length;
+        updateActiveCityOption();
+        event.preventDefault();
+    }
+
+    if (event.key === 'Enter' && activeCityIndex >= 0) {
+        applyCityValue(filteredCityOptions[activeCityIndex]);
+        event.preventDefault();
+    }
+}
+
+function initCityCombobox() {
+    if (!recipientCityInput || !recipientCityCombobox || !recipientCityOptions || !recipientCityEmpty) {
+        return;
+    }
+
+    renderCityOptions(recipientCityInput.value);
+
+    recipientCityInput.addEventListener('focus', () => {
+        renderCityOptions(recipientCityInput.value);
+        openCityCombobox();
+    });
+
+    recipientCityInput.addEventListener('click', () => {
+        renderCityOptions(recipientCityInput.value);
+        openCityCombobox();
+    });
+
+    recipientCityInput.addEventListener('input', () => {
+        renderCityOptions(recipientCityInput.value);
+        openCityCombobox();
+    });
+
+    recipientCityInput.addEventListener('keydown', handleCityComboboxKeydown);
+
+    recipientCityOptions.addEventListener('click', (event) => {
+        const option = event.target.closest('.city-option');
+        if (!option) return;
+
+        applyCityValue(option.dataset.city || option.textContent.trim());
+        recipientCityInput.focus();
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!recipientCityCombobox.contains(event.target)) {
+            closeCityCombobox();
+        }
+    });
+}
+
+function initPickerCombobox({ select, combobox, trigger, valueNode, optionsContainer }) {
+    if (!select || !combobox || !trigger || !valueNode || !optionsContainer) {
+        return;
+    }
+
+    const options = Array.from(select.options).map((option) => ({
+        value: option.value,
+        label: option.textContent.trim()
+    }));
+
+    const placeholderOption = options.find((option) => !option.value);
+    const placeholderLabel = placeholderOption?.label || 'Виберіть';
+    let activeIndex = Math.max(0, select.selectedIndex);
+
+    function syncTriggerLabel() {
+        const selectedOption = options.find((option) => option.value === select.value) || placeholderOption;
+        const label = selectedOption?.label || placeholderLabel;
+        const isPlaceholder = !select.value;
+
+        valueNode.textContent = label;
+        valueNode.classList.toggle('is-placeholder', isPlaceholder);
+    }
+
+    function renderOptions() {
+        optionsContainer.innerHTML = options
+            .filter((option) => option.value)
+            .map((option, index) => `
+                <button
+                    type="button"
+                    class="picker-option${option.value === select.value ? ' is-selected' : ''}${index === activeIndex ? ' is-active' : ''}"
+                    data-value="${escapeHtml(option.value)}"
+                >
+                    ${escapeHtml(option.label)}
+                </button>
+            `)
+            .join('');
+    }
+
+    function openCombobox() {
+        closeCityCombobox();
+        closeOtherPickerComboboxes(combobox);
+        combobox.classList.add('open');
+        trigger.setAttribute('aria-expanded', 'true');
+        activeIndex = Math.max(0, options.findIndex((option) => option.value === select.value) - 1);
+        renderOptions();
+    }
+
+    function syncFromSelect() {
+        syncTriggerLabel();
+        renderOptions();
+    }
+
+    function applyValue(value) {
+        select.value = value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        syncFromSelect();
+        closePickerCombobox(combobox, trigger);
+    }
+
+    trigger.addEventListener('click', () => {
+        const isOpen = combobox.classList.contains('open');
+        if (isOpen) {
+            closePickerCombobox(combobox, trigger);
+            return;
+        }
+
+        openCombobox();
+    });
+
+    trigger.addEventListener('keydown', (event) => {
+        const enabledOptions = options.filter((option) => option.value);
+        if (!enabledOptions.length) return;
+
+        if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+            if (!combobox.classList.contains('open')) {
+                openCombobox();
+            } else if (event.key === 'ArrowDown') {
+                activeIndex = (activeIndex + 1) % enabledOptions.length;
+                renderOptions();
+            } else {
+                applyValue(enabledOptions[Math.max(activeIndex, 0)]?.value || '');
+            }
+            event.preventDefault();
+        }
+
+        if (event.key === 'ArrowUp' && combobox.classList.contains('open')) {
+            activeIndex = (activeIndex - 1 + enabledOptions.length) % enabledOptions.length;
+            renderOptions();
+            event.preventDefault();
+        }
+
+        if (event.key === 'Escape') {
+            closePickerCombobox(combobox, trigger);
+            event.preventDefault();
+        }
+    });
+
+    optionsContainer.addEventListener('click', (event) => {
+        const optionButton = event.target.closest('.picker-option');
+        if (!optionButton) return;
+
+        applyValue(optionButton.dataset.value || '');
+    });
+
+    select.addEventListener('change', syncFromSelect);
+
+    document.addEventListener('click', (event) => {
+        if (!combobox.contains(event.target)) {
+            closePickerCombobox(combobox, trigger);
+        }
+    });
+
+    syncFromSelect();
+}
+
+function initSelectComboboxes() {
+    initPickerCombobox({
+        select: deliveryMethodSelect,
+        combobox: deliveryMethodCombobox,
+        trigger: deliveryMethodTrigger,
+        valueNode: deliveryMethodValue,
+        optionsContainer: deliveryMethodOptions
+    });
+
+    initPickerCombobox({
+        select: paymentMethodSelect,
+        combobox: paymentMethodCombobox,
+        trigger: paymentMethodTrigger,
+        valueNode: paymentMethodValue,
+        optionsContainer: paymentMethodOptions
+    });
+}
+
+function getOrderDueTotal() {
+    const cart = getCartFromStorage();
+    return cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
+}
+
+function updatePaymentDeliveryNote() {
+    if (!paymentDeliveryNote) {
+        return;
+    }
+
+    const baseNote = 'Доставка здійснюється за тарифами перевізника.';
+    if (paymentMethodSelect?.value !== 'cod') {
+        paymentDeliveryNote.textContent = baseNote;
+        return;
+    }
+
+    const codFee = 20 + getOrderDueTotal() * 0.02;
+    paymentDeliveryNote.innerHTML = `${baseNote} Вартість накладеного платежу: 20 грн. + 2% від суми замовлення, всього <strong>${Number(codFee).toLocaleString('uk-UA')}</strong> грн.`;
+}
+
+function getDeliveryFieldConfig(deliveryMethod) {
+    switch (deliveryMethod) {
+        case 'nova_branch':
+            return {
+                visible: true,
+                label: 'Номер поштового відділення *',
+                placeholder: 'Наприклад: № 29'
+            };
+        case 'nova_locker':
+            return {
+                visible: true,
+                label: 'Номер поштомату *',
+                placeholder: 'Наприклад: № 4796'
+            };
+        case 'nova_courier':
+            return {
+                visible: true,
+                label: 'Адреса доставки *',
+                placeholder: 'Наприклад: вул. Хрещатик, 10, кв. 5'
+            };
+        case 'other_post':
+            return {
+                visible: true,
+                label: 'Адреса доставки *',
+                placeholder: 'Вкажіть повну адресу доставки'
+            };
+        default:
+            return {
+                visible: false,
+                label: 'Номер поштового відділення *',
+                placeholder: 'Наприклад: № 29'
+            };
+    }
+}
+
+function updateDeliveryFieldVisibility() {
+    const config = getDeliveryFieldConfig(deliveryMethodSelect?.value || '');
+
+    if (postalFieldGroup) {
+        postalFieldGroup.classList.toggle('active', config.visible);
+    }
+
+    if (postalBranchInput) {
+        postalBranchInput.required = config.visible;
+        postalBranchInput.placeholder = config.placeholder;
+    }
+
+    if (postalBranchLabel) {
+        postalBranchLabel.textContent = config.label;
+    }
+}
+
 function showRegisterError(message) {
     if (registerFeedback) {
         registerFeedback.textContent = message;
@@ -72,76 +477,452 @@ function showRegisterError(message) {
     }
 }
 
-function resetRegisterForm() {
-    if (registerForm) {
-        registerForm.reset();
-    }
-    if (registerFeedback) {
-        registerFeedback.textContent = '';
-        registerFeedback.style.display = 'none';
+function setRegisterStatus(message) {
+    if (registerStatusText) {
+        registerStatusText.textContent = message;
+        registerStatusText.style.display = message ? 'block' : 'none';
     }
 }
 
+function updateModalMode() {
+    const modalTitle = document.getElementById('modalTitle');
+    const modalSubmitBtn = document.getElementById('modalSubmitBtn');
+    const oauthButtons = document.getElementById('oauthButtons');
+    const authDivider = document.getElementById('authDivider');
+    const forgotPasswordRow = document.getElementById('forgotPasswordRow');
+    const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+    const resendCodeRow = document.getElementById('resendCodeRow');
+    const resendCodeLink = document.getElementById('resendCodeLink');
+
+    if (isPasswordResetMode) {
+        if (modalTitle) {
+            modalTitle.textContent = passwordResetStep === 'new_password' ? 'Новий пароль' : 'Відновлення пароля';
+        }
+        if (regUsernameInput) {
+            regUsernameInput.style.display = 'none';
+            regUsernameInput.required = false;
+        }
+        if (loginEmailInput) {
+            loginEmailInput.style.display = passwordResetStep === 'code' ? 'none' : 'block';
+            loginEmailInput.required = passwordResetStep === 'email';
+            loginEmailInput.readOnly = passwordResetStep !== 'email';
+        }
+        if (loginPasswordInput) {
+            loginPasswordInput.style.display = passwordResetStep === 'new_password' ? 'block' : 'none';
+            loginPasswordInput.required = passwordResetStep === 'new_password';
+            loginPasswordInput.placeholder = passwordResetStep === 'new_password' ? 'Новий пароль' : 'Пароль';
+        }
+        if (verificationCodeInput) {
+            verificationCodeInput.style.display = passwordResetStep === 'code' ? 'block' : 'none';
+            verificationCodeInput.required = passwordResetStep === 'code';
+        }
+        if (modalSubmitBtn) {
+            modalSubmitBtn.textContent = passwordResetStep === 'code'
+                ? 'Підтвердити код'
+                : passwordResetStep === 'new_password'
+                    ? 'Зберегти пароль'
+                    : 'Надіслати код';
+        }
+        if (switchLink) {
+            switchLink.innerHTML = '<a href="#" id="switchToLogin" class="auth-inline-link">Повернутися до входу</a>';
+            switchLink.classList.add('auth-compact-links');
+            switchLink.style.display = 'inline-flex';
+            const switchAnchor = document.getElementById('switchToLogin');
+            if (switchAnchor) {
+                switchAnchor.onclick = (event) => {
+                    event.preventDefault();
+                    resetRegisterForm();
+                };
+            }
+        }
+        if (resendCodeRow) resendCodeRow.classList.add('auth-compact-links');
+        if (forgotPasswordRow) forgotPasswordRow.style.display = 'none';
+        if (oauthButtons) oauthButtons.style.display = 'none';
+        if (authDivider) authDivider.style.display = 'none';
+        if (resendCodeRow) resendCodeRow.style.display = passwordResetStep === 'code' ? 'inline-flex' : 'none';
+        setRegisterStatus(
+            passwordResetStep === 'code'
+                ? `Ми надіслали код на ${pendingPasswordResetEmail || (loginEmailInput?.value.trim() || '')}. Введіть його, щоб продовжити.`
+                : passwordResetStep === 'new_password'
+                    ? 'Введіть новий пароль для свого акаунта.'
+                    : ''
+        );
+        if (passwordResetStep === 'code' && resendCodeLink) {
+            resendCodeLink.onclick = async (event) => {
+                event.preventDefault();
+                try {
+                    await requestPasswordReset(pendingPasswordResetEmail || (loginEmailInput?.value.trim() || ''));
+                    showSuccess('Код для відновлення пароля надіслано повторно.');
+                } catch (error) {
+                    showRegisterError('Помилка повторної відправки коду: ' + error.message);
+                }
+            };
+        }
+        return;
+    }
+
+    if (switchLink) {
+        switchLink.classList.remove('auth-compact-links');
+        switchLink.style.display = '';
+    }
+    if (resendCodeRow) resendCodeRow.classList.remove('auth-compact-links');
+
+    if (modalTitle) {
+        modalTitle.textContent = isRegisterMode ? 'Реєстрація' : 'Вхід';
+    }
+    if (regUsernameInput) {
+        regUsernameInput.style.display = isRegisterMode && !isVerificationStep ? 'block' : 'none';
+        regUsernameInput.required = isRegisterMode && !isVerificationStep;
+    }
+    if (loginEmailInput) {
+        loginEmailInput.style.display = isRegisterMode && isVerificationStep ? 'none' : 'block';
+        loginEmailInput.required = !isRegisterMode || !isVerificationStep;
+        loginEmailInput.readOnly = isRegisterMode && isVerificationStep;
+    }
+    if (loginPasswordInput) {
+        loginPasswordInput.style.display = isRegisterMode && isVerificationStep ? 'none' : 'block';
+        loginPasswordInput.required = !isRegisterMode || !isVerificationStep;
+        loginPasswordInput.placeholder = 'Пароль';
+    }
+    if (verificationCodeInput) {
+        verificationCodeInput.style.display = isRegisterMode && isVerificationStep ? 'block' : 'none';
+        verificationCodeInput.required = isRegisterMode && isVerificationStep;
+    }
+    if (modalSubmitBtn) {
+        modalSubmitBtn.textContent = isRegisterMode
+            ? (isVerificationStep ? 'Підтвердити email' : 'Надіслати код')
+            : 'Вхід';
+    }
+    if (switchLink) {
+        switchLink.innerHTML = isRegisterMode
+            ? 'Вже маєте акаунт? <a href="#" id="switchToLogin" class="auth-inline-link">Увійти</a>'
+            : 'Ще не маєте акаунта? <a href="#" id="switchToRegister" class="auth-inline-link">Зареєструватися</a>';
+
+        const switchAnchor = document.getElementById(isRegisterMode ? 'switchToLogin' : 'switchToRegister');
+        if (switchAnchor) {
+            switchAnchor.onclick = (event) => {
+                event.preventDefault();
+                isRegisterMode = !isRegisterMode;
+                isVerificationStep = false;
+                pendingRegistrationEmail = '';
+                updateModalMode();
+            };
+        }
+    }
+
+    if (forgotPasswordRow) forgotPasswordRow.style.display = isRegisterMode ? 'none' : 'block';
+    if (resendCodeRow) resendCodeRow.style.display = 'none';
+    if (oauthButtons) oauthButtons.style.display = '';
+    if (authDivider) authDivider.style.display = '';
+    if (googleLoginBtn) googleLoginBtn.style.display = 'block';
+    if (!isRegisterMode && forgotPasswordLink) {
+        forgotPasswordLink.onclick = (event) => {
+            event.preventDefault();
+            isPasswordResetMode = true;
+            passwordResetStep = 'email';
+            pendingPasswordResetEmail = '';
+            pendingPasswordResetToken = '';
+            updateModalMode();
+        };
+    }
+
+    setRegisterStatus(
+        isRegisterMode && isVerificationStep
+            ? `Ми надіслали код на ${pendingRegistrationEmail || (loginEmailInput?.value.trim() || '')}. Введіть його, щоб завершити реєстрацію.`
+            : ''
+    );
+}
+
+function resetRegisterForm() {
+    if (loginForm) {
+        loginForm.reset();
+    }
+    showRegisterError('');
+    setRegisterStatus('');
+    isRegisterMode = false;
+    isVerificationStep = false;
+    pendingRegistrationEmail = '';
+    isPasswordResetMode = false;
+    passwordResetStep = '';
+    pendingPasswordResetEmail = '';
+    pendingPasswordResetToken = '';
+    updateModalMode();
+}
+
+function saveCheckoutFormState() {
+    const state = {
+        recipientPhone: recipientPhoneInput?.value || '',
+        recipientName: recipientNameInput?.value || '',
+        recipientCity: recipientCityInput?.value || '',
+        deliveryMethod: deliveryMethodSelect?.value || '',
+        postalBranchNumber: postalBranchInput?.value || '',
+        paymentMethod: paymentMethodSelect?.value || '',
+        notes: notesTextarea?.value || ''
+    };
+    localStorage.setItem('checkoutFormState', JSON.stringify(state));
+}
+
+function clearCheckoutFormState() {
+    localStorage.removeItem('checkoutFormState');
+}
+
+function scheduleCartClearAfterSuccessfulOrder() {
+    if (typeof markPendingCheckoutCartClear === 'function') {
+        markPendingCheckoutCartClear();
+    }
+}
+
+function restoreCheckoutFormState(removeAfterRestore = false) {
+    const rawState = localStorage.getItem('checkoutFormState');
+    if (!rawState) {
+        return;
+    }
+
+    try {
+        const state = JSON.parse(rawState);
+        if (recipientPhoneInput) recipientPhoneInput.value = state.recipientPhone || '';
+        if (recipientNameInput) recipientNameInput.value = state.recipientName || '';
+        if (recipientCityInput) recipientCityInput.value = state.recipientCity || '';
+        if (deliveryMethodSelect) deliveryMethodSelect.value = state.deliveryMethod || '';
+        if (postalBranchInput) postalBranchInput.value = state.postalBranchNumber || '';
+        if (paymentMethodSelect) paymentMethodSelect.value = state.paymentMethod || '';
+        if (notesTextarea) notesTextarea.value = state.notes || '';
+
+        updateDeliveryFieldVisibility();
+    } catch (error) {
+        console.error('Failed to restore checkout form state:', error);
+    } finally {
+        if (removeAfterRestore) {
+            clearCheckoutFormState();
+        }
+    }
+}
+
+function setFieldValueIfEmpty(field, value) {
+    if (!field) return false;
+
+    const nextValue = String(value || '').trim();
+    if (!nextValue || field.value.trim()) {
+        return false;
+    }
+
+    field.value = nextValue;
+    return true;
+}
+
+async function applyProfileDefaults() {
+    if (isGuest) {
+        return;
+    }
+
+    try {
+        const data = await getUserProfile();
+        const profile = data && data.profile ? data.profile : null;
+        if (!profile) {
+            return;
+        }
+
+        const hasChanges = [
+            setFieldValueIfEmpty(recipientNameInput, profile.full_name),
+            setFieldValueIfEmpty(recipientPhoneInput, profile.phone),
+            setFieldValueIfEmpty(recipientCityInput, profile.address)
+        ].some(Boolean);
+
+        if (hasChanges) {
+            saveCheckoutFormState();
+        }
+    } catch (error) {
+        console.error('Failed to apply checkout profile defaults:', error);
+    }
+}
+
+function syncCheckoutFormState() {
+    [
+        recipientPhoneInput,
+        recipientNameInput,
+        recipientCityInput,
+        deliveryMethodSelect,
+        postalBranchInput,
+        paymentMethodSelect,
+        notesTextarea
+    ].forEach((field) => {
+        if (!field) return;
+        field.addEventListener('input', saveCheckoutFormState);
+        field.addEventListener('change', saveCheckoutFormState);
+    });
+}
+
+function updateCheckoutAuthStatus() {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+        isGuest = false;
+        if (guestAuthNoticeDiv) {
+            guestAuthNoticeDiv.style.display = 'none';
+        }
+        if (checkoutAuthNoticeDiv) {
+            checkoutAuthNoticeDiv.style.display = 'none';
+        }
+    } else {
+        isGuest = true;
+        if (guestAuthNoticeDiv) {
+            guestAuthNoticeDiv.style.display = 'block';
+        }
+        if (checkoutAuthNoticeDiv) {
+            checkoutAuthNoticeDiv.style.display = 'block';
+        }
+    }
+}
+
+// Сделать функцию глобальной для вызова из script.js
+window.updateCheckoutAuthStatus = updateCheckoutAuthStatus;
+
 function openRegisterModal() {
-    if (registerModal) {
+    if (loginModal) {
+        isRegisterMode = false;
         resetRegisterForm();
-        registerModal.style.display = 'block';
+        updateModalMode();
+        loginModal.style.display = 'block';
     }
 }
 
 function closeRegisterModal() {
-    if (registerModal) {
-        registerModal.style.display = 'none';
+    if (loginModal) {
+        loginModal.style.display = 'none';
     }
     resetRegisterForm();
 }
 
 async function handleRegisterFormSubmit(event) {
     event.preventDefault();
+    const email = loginEmailInput?.value.trim() || '';
+    const password = loginPasswordInput?.value.trim() || '';
     const username = regUsernameInput?.value.trim() || '';
-    const email = regEmailInput?.value.trim() || '';
-    const password = regPasswordInput?.value.trim() || '';
+    const verificationCode = verificationCodeInput?.value.trim() || '';
+    saveCheckoutFormState();
 
-    if (!username || !email || !password) {
-        showRegisterError('Будь ласка, заповніть всі поля для реєстрації.');
-        return;
-    }
+    if (isRegisterMode) {
+        if (!isVerificationStep && (!username || !email || !password)) {
+            showRegisterError('Будь ласка, заповніть всі поля для реєстрації.');
+            return;
+        }
+        if (isVerificationStep && !verificationCode) {
+            showRegisterError('Введіть код підтвердження з email.');
+            return;
+        }
 
-    if (password.length < 6) {
-        showRegisterError('Пароль має містити щонайменше 6 символів.');
-        return;
-    }
+        try {
+            showRegisterError('');
+            if (!isVerificationStep) {
+                const validationError = validateRegistrationInput(username, email, password);
+                if (validationError) {
+                    showRegisterError(validationError);
+                    return;
+                }
+                await requestRegistrationCode(username, email, password);
+                pendingRegistrationEmail = email;
+                isVerificationStep = true;
+                updateModalMode();
+                showSuccess('Код підтвердження надіслано на вашу електронну пошту.');
+                return;
+            }
 
-    try {
-        showRegisterError('');
-        const result = await registerUser(username, email, password);
-        if (result && result.token) {
+            const result = await verifyRegistrationCode(email, verificationCode);
             checkoutAuthToken = result.token;
-            localStorage.setItem('auth_token', checkoutAuthToken);
-        } else {
-            const loginResult = await loginUser(email, password);
-            checkoutAuthToken = loginResult.token;
+            isGuest = false;
+            updateCheckoutAuthStatus();
+            restoreCheckoutFormState();
+            await applyProfileDefaults();
+            showSuccess('Email підтверджено, реєстрація завершена успішно.');
+            closeRegisterModal();
+        } catch (error) {
+            showRegisterError('Помилка реєстрації: ' + error.message);
         }
+    } else {
+        if (isPasswordResetMode) {
+            const email = pendingPasswordResetEmail || (loginEmailInput?.value.trim() || '');
+            const verificationCode = verificationCodeInput?.value.trim() || '';
+            const newPassword = loginPasswordInput?.value || '';
 
-        isGuest = false;
-        if (guestAuthNoticeDiv) {
-            guestAuthNoticeDiv.style.display = 'none';
+            try {
+                showRegisterError('');
+                if (passwordResetStep === 'email') {
+                    pendingPasswordResetEmail = loginEmailInput?.value.trim() || '';
+                    passwordResetStep = 'code';
+                    updateModalMode();
+                    await new Promise((resolve) => window.requestAnimationFrame(resolve));
+                    try {
+                        await requestPasswordReset(pendingPasswordResetEmail);
+                    } catch (error) {
+                        passwordResetStep = 'email';
+                        updateModalMode();
+                        throw error;
+                    }
+                    showSuccess('Код для відновлення пароля надіслано на вашу електронну пошту.');
+                    return;
+                }
+
+                if (passwordResetStep === 'code') {
+                    const result = await verifyPasswordResetCode(email, verificationCode);
+                    pendingPasswordResetToken = result.reset_token;
+                    passwordResetStep = 'new_password';
+                    if (verificationCodeInput) verificationCodeInput.value = '';
+                    updateModalMode();
+                    return;
+                }
+
+                await confirmPasswordReset(email, pendingPasswordResetToken, newPassword);
+                const loginResult = await loginUser(email, newPassword);
+                checkoutAuthToken = loginResult.token;
+                localStorage.setItem('auth_token', checkoutAuthToken);
+                isGuest = false;
+                updateCheckoutAuthStatus();
+                restoreCheckoutFormState();
+                await applyProfileDefaults();
+                resetRegisterForm();
+                closeRegisterModal();
+                showSuccess('Пароль успішно оновлено, ви автоматично увійшли в акаунт.');
+            } catch (error) {
+                showRegisterError('Помилка відновлення пароля: ' + error.message);
+            }
+        } else if (!email || !password) {
+            showRegisterError('Будь ласка, заповніть всі поля для входу.');
+            return;
+        } else {
+            try {
+                showRegisterError('');
+                const loginResult = await loginUser(email, password);
+                checkoutAuthToken = loginResult.token;
+                localStorage.setItem('auth_token', checkoutAuthToken);
+                isGuest = false;
+                updateCheckoutAuthStatus();
+                restoreCheckoutFormState();
+                await applyProfileDefaults();
+                showSuccess('Ви успішно авторизувалися та зможете відстежувати статус свого замовлення!');
+                closeRegisterModal();
+            } catch (error) {
+                showRegisterError('Помилка: ' + error.message);
+            }
         }
-        closeRegisterModal();
-        showSuccess('Реєстрація пройшла успішно. Ви увійшли в систему і можете продовжити оформлення замовлення.');
-    } catch (error) {
-        showRegisterError('Помилка реєстрації: ' + (error.message || 'Невідома помилка'));
-        console.error('Register error:', error);
     }
 }
 
 function renderOrderReceipt() {
     const cart = getCartFromStorage();
-    const total = cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
+    const total = getOrderDueTotal();
+    const due = total;
 
     if (!cart.length) {
-        orderReceiptItemsDiv.innerHTML = '<div style="color:#666; padding: 0.5rem 0;">У вашій корзині наразі немає товарів.</div>';
-        orderReceiptTotalSpan.textContent = formatPrice(0);
+        orderReceiptItemsDiv.innerHTML = '<div style="color:#666; padding: 0.5rem 0;">У Вашому кошику наразі немає товарів.</div>';
+        orderReceiptTotalSpan.innerHTML = `
+            <span class="order-receipt-summary-row">
+                <span>Загальна сума:</span>
+                <strong>${formatPrice(0)}</strong>
+            </span>
+            <span class="order-receipt-summary-row">
+                <span>До сплати:</span>
+                <strong>${formatPrice(0)}</strong>
+            </span>
+        `;
         return;
     }
 
@@ -165,27 +946,48 @@ function renderOrderReceipt() {
         `;
     }).join('');
 
-    orderReceiptTotalSpan.textContent = formatPrice(total);
+    orderReceiptTotalSpan.innerHTML = `
+        <span class="order-receipt-summary-row">
+            <span>Загальна сума:</span>
+            <strong>${formatPrice(total)}</strong>
+        </span>
+        <span class="order-receipt-summary-row">
+            <span>До сплати:</span>
+            <strong>${formatPrice(due)}</strong>
+        </span>
+    `;
+
+    updatePaymentDeliveryNote();
 }
 
 // ===== ИНИЦИАЛИЗАЦИЯ =====
 async function initCheckout() {
     console.log('🛒 Initializing checkout...');
-    
-    // Показать статус гостя
-    if (isGuest) {
-        guestAuthNoticeDiv.style.display = 'block';
-    } else {
-        // Для зареєстрованих користувачів заповнити email
-        try {
-            const user = await getCurrentUser();
-            if (user) {
-                document.getElementById('email').value = user.email || '';
-            }
-        } catch (error) {
-            console.error('Error getting user:', error);
+
+    restoreCheckoutFormState();
+    initCityCombobox();
+    initSelectComboboxes();
+    syncCheckoutFormState();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    if (token) {
+        checkoutAuthToken = token;
+        localStorage.setItem('auth_token', token);
+        isGuest = false;
+        if (guestAuthNoticeDiv) {
+            guestAuthNoticeDiv.style.display = 'none';
         }
+        showSuccess('Ви успішно авторизувалися та зможете відстежувати статус свого замовлення!');
+        urlParams.delete('token');
+        const newSearch = urlParams.toString();
+        const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '') + window.location.hash;
+        window.history.replaceState({}, document.title, newUrl);
     }
+    
+    // Обновить статус авторизации
+    updateCheckoutAuthStatus();
+    await applyProfileDefaults();
 
     renderOrderReceipt();
 
@@ -222,17 +1024,9 @@ function getCartFromStorage() {
 }
 
 function setupEventListeners() {
-    // Условное отображение поля почтовых отделений
-    deliveryMethodSelect.addEventListener('change', () => {
-        const isPostal = deliveryMethodSelect.value === 'postal';
-        if (isPostal) {
-            postalFieldGroup.classList.add('active');
-            postalBranchInput.required = true;
-        } else {
-            postalFieldGroup.classList.remove('active');
-            postalBranchInput.required = false;
-        }
-    });
+    // Условное отображение дополнительного поля доставки
+    deliveryMethodSelect.addEventListener('change', updateDeliveryFieldVisibility);
+    paymentMethodSelect.addEventListener('change', updatePaymentDeliveryNote);
 
     // Кнопки
     cancelBtn.addEventListener('click', () => {
@@ -248,20 +1042,43 @@ function setupEventListeners() {
     if (registerLink) {
         registerLink.addEventListener('click', (event) => {
             event.preventDefault();
+            saveCheckoutFormState();
             openRegisterModal();
         });
     }
 
-    if (closeRegisterModalBtn) {
-        closeRegisterModalBtn.addEventListener('click', closeRegisterModal);
+    const checkoutAuthLink = document.getElementById('checkoutAuthLink');
+    if (checkoutAuthLink) {
+        checkoutAuthLink.addEventListener('click', (event) => {
+            event.preventDefault();
+            if (!isGuest) {
+                showSuccess('Ви вже авторизовані. Ви зможете відстежувати своє замовлення.');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                return;
+            }
+            saveCheckoutFormState();
+            openRegisterModal();
+        });
     }
 
-    if (registerForm) {
-        registerForm.addEventListener('submit', handleRegisterFormSubmit);
+    if (googleLoginBtn) {
+        googleLoginBtn.onclick = () => {
+            saveCheckoutFormState();
+            const nextPath = `${window.location.pathname}${window.location.search}`;
+            window.location.href = `/auth/google?next=${encodeURIComponent(nextPath)}`;
+        };
+    }
+
+    if (closeLoginModalBtn) {
+        closeLoginModalBtn.addEventListener('click', closeRegisterModal);
+    }
+
+    if (loginForm) {
+        loginForm.addEventListener('submit', handleRegisterFormSubmit);
     }
 
     window.addEventListener('click', (event) => {
-        if (event.target === registerModal) {
+        if (event.target === loginModal) {
             closeRegisterModal();
         }
     });
@@ -290,39 +1107,48 @@ async function handleFormSubmit(e) {
     submitBtn.innerHTML = '<span class="spinner"></span> Обработка...';
 
     try {
-        // Если пользователь может зарегистрироваться
+        let orderResult;
         if (isGuest) {
-            const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('password').value.trim();
-            const username = document.getElementById('username').value.trim();
-
-            // Если есть данные для регистрации, попытаться зарегистрировать
-            if (email || password || username) {
-                await registerAndCreateOrder();
-            } else {
-                // Иначе создать заказ как гость
-                await createGuestOrderFlow();
-            }
+            // Создать заказ как гость
+            orderResult = await createGuestOrderFlow();
         } else {
             // Зареєстрований користувач
-            await createRegisteredUserOrder();
+            orderResult = await createRegisteredUserOrder();
         }
 
-        showSuccess('✅ Замовлення успішно створено! Менеджер звʼяжеться з вами найближчим часом. Ви залишаєтеся на сторінці оформлення замовлення.');
+        const orderNumber = orderResult?.order_number || 'невідомий';
+        const successMessage = isGuest
+            ? `✅ Замовлення <strong>${orderNumber}</strong> успішно створено! Менеджер звʼяжеться з Вами найближчим часом.`
+            : `✅ Замовлення <strong>${orderNumber}</strong> успішно створено! Менеджер звʼяжеться з Вами найближчим часом. <a href="#">Переглянути статус замовлення</a>`;
+        showSuccess(successMessage);
+
+        if (guestAuthNoticeDiv) {
+            guestAuthNoticeDiv.style.display = 'none';
+        }
+        
+        // Прокрутить страницу вверх, чтобы пользователь увидел уведомление
+        if (!isGuest && orderResult?.id) {
+            const successOrderLink = successMessageDiv.querySelector('a');
+            if (successOrderLink) {
+                successOrderLink.href = `/profile.html?highlightOrderId=${encodeURIComponent(orderResult.id)}`;
+            }
+        }
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         
         // Очистить корзину
-        localStorage.removeItem('cart');
+        scheduleCartClearAfterSuccessfulOrder();
         
         // Обновить чек и интерфейс, но не перенаправлять пользователя
         renderOrderReceipt();
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Завершити замовлення';
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Замовлення оформлено';
 
     } catch (error) {
         console.error('Error creating order:', error);
         showError('Помилка при створенні замовлення: ' + (error.message || 'Невідома помилка'));
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Завершити замовлення';
+        submitBtn.textContent = 'Підтвердити';
     }
 }
 
@@ -339,52 +1165,16 @@ function validateForm() {
         return false;
     }
 
-    if (delivery === 'postal' && !postalBranch) {
-        showError('Будь ласка, введіть номер поштового відділення.');
+    if (getDeliveryFieldConfig(delivery).visible && !postalBranch) {
+        const labelText = (postalBranchLabel?.textContent || 'Додаткове поле доставки')
+            .replace(' *', '')
+            .trim()
+            .toLowerCase();
+        showError(`Будь ласка, введіть ${labelText}.`);
         return false;
     }
 
-    if (isGuest) {
-        const email = document.getElementById('email').value.trim();
-        const password = document.getElementById('password').value.trim();
-        const username = document.getElementById('username').value.trim();
-        const hasAuthData = email || password || username;
-
-        if (hasAuthData) {
-            // Все поля мають бути заповнені для реєстрації
-            if (!email || !password || !username) {
-                showError('Для реєстрації необхідно заповнити email, пароль та ім\'я користувача.');
-                return false;
-            }
-            if (password.length < 6) {
-                showError('Пароль мінімум 6 символів.');
-                return false;
-            }
-        }
-    }
-
     return true;
-}
-
-async function registerAndCreateOrder() {
-    console.log('🛒 Registering user and creating order...');
-    
-    const email = document.getElementById('email').value.trim();
-    const password = document.getElementById('password').value.trim();
-    const username = document.getElementById('username').value.trim();
-
-    try {
-        // Зарегистрировать пользователя
-        const registerResult = await registerUser(username, email, password);
-        checkoutAuthToken = registerResult.token;
-        localStorage.setItem('auth_token', checkoutAuthToken);
-        isGuest = false;
-
-        // Создать заказ
-        await createRegisteredUserOrder();
-    } catch (error) {
-        throw new Error('Помилка реєстрації: ' + (error.message || 'Невідома помилка'));
-    }
 }
 
 async function createRegisteredUserOrder() {
@@ -408,9 +1198,11 @@ async function createRegisteredUserOrder() {
         console.log('🛒 Order created:', result);
 
         // Отправить резюме в чат
-        const summary = buildOrderSummary();
+        const summary = buildOrderSummary(result.order_number);
         await postUserChat(summary);
+        setPendingOrderChatAttention(result.order_number);
 
+        return result;
     } catch (error) {
         throw new Error('Помилка при створенні замовлення: ' + (error.message || ''));
     }
@@ -438,25 +1230,40 @@ async function createGuestOrderFlow() {
         console.log('🛒 Guest order created:', result);
 
         // Отправить резюме в гостевой чат
-        const summary = buildOrderSummary();
+        const summary = buildOrderSummary(result.order_number);
         await postGuestChat(guestIdentifier, summary);
 
+        return result;
     } catch (error) {
         throw new Error('Помилка при створенні замовлення: ' + (error.message || ''));
     }
 }
 
-function buildOrderSummary() {
+function buildOrderSummary(orderNumber) {
     const cart = getCartFromStorage();
     const total = cart.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0);
-    const deliveryText = deliveryMethodSelect.value === 'postal'
-        ? `Пошта (${escapeHtml(postalBranchInput.value.trim()) || 'не вказано'})`
-        : 'Кур’єр';
+    const deliveryValue = postalBranchInput.value.trim();
+    let deliveryText = 'Не вказано';
+
+    switch (deliveryMethodSelect.value) {
+        case 'nova_branch':
+            deliveryText = `Доставка у відділення Нової пошти (${escapeHtml(deliveryValue) || 'не вказано'})`;
+            break;
+        case 'nova_locker':
+            deliveryText = `Доставка у поштомат Нової пошти (${escapeHtml(deliveryValue) || 'не вказано'})`;
+            break;
+        case 'nova_courier':
+            deliveryText = `Доставка кур'єром Нової пошти (${escapeHtml(deliveryValue) || 'не вказано'})`;
+            break;
+        case 'other_post':
+            deliveryText = `Доставка іншою поштою (${escapeHtml(deliveryValue) || 'не вказано'})`;
+            break;
+    }
     const paymentText = paymentMethodSelect.value === 'cod' ? 'Накладений платіж' : 'Оплата карткою';
 
     let summary = `
         <div class="order-receipt">
-            <div class="order-receipt-header">Чек замовлення</div>
+            <div class="order-receipt-header">Чек замовлення № ${escapeHtml(orderNumber)}</div>
             <div class="order-receipt-meta">
                 <div>Телефон: ${escapeHtml(recipientPhoneInput.value)}</div>
                 <div>Ім'я: ${escapeHtml(recipientNameInput.value)}</div>
@@ -486,8 +1293,14 @@ function buildOrderSummary() {
             </div>
             ${notesTextarea.value.trim() ? `<div class="order-receipt-note"><strong>Примітки:</strong> ${escapeHtml(notesTextarea.value.trim())}</div>` : ''}
             <div class="order-receipt-total">
-                <span>Загальна сума:</span>
-                <strong>${formatPrice(total)}</strong>
+                <span class="order-receipt-summary-row">
+                    <span>Загальна сума:</span>
+                    <strong>${formatPrice(total)}</strong>
+                </span>
+                <span class="order-receipt-summary-row">
+                    <span>До сплати:</span>
+                    <strong>${formatPrice(total)}</strong>
+                </span>
             </div>
         </div>
     `;
@@ -500,4 +1313,14 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initCheckout);
 } else {
     initCheckout();
+}
+
+// Обработчик кнопки Google OAuth
+const googleRegisterBtn = document.getElementById('googleRegisterBtn');
+if (googleRegisterBtn) {
+    googleRegisterBtn.onclick = () => {
+        saveCheckoutFormState();
+        const nextPath = `${window.location.pathname}${window.location.search}`;
+        window.location.href = `/auth/google?next=${encodeURIComponent(nextPath)}`;
+    };
 }

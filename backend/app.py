@@ -1,14 +1,40 @@
-from flask import Flask, jsonify, request, send_from_directory, abort
+from flask import Flask, jsonify, request, send_from_directory, abort, redirect, url_for, session
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
+import json
 import os
+import re
+import random
+import shutil
+import smtplib
+import tempfile
+import zipfile
 from datetime import datetime, timedelta
+from email.message import EmailMessage
 import jwt
 from werkzeug.utils import secure_filename
 import uuid
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from mimetypes import guess_type
 import logging
+from pathlib import Path
+import requests
+from requests_oauthlib import OAuth2Session
+from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BASE_DIR.parent
+
+# Загружать переменные окружения и из корня проекта, и из backend/.env
+load_dotenv(PROJECT_ROOT / '.env')
+load_dotenv(BASE_DIR / '.env', override=True)
+
+# Разрешить локальную OAuth2 разработку по HTTP
+if os.getenv('FLASK_ENV', 'development') == 'development':
+    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # only for local development
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -34,6 +60,15 @@ if DB_PATH == 'sqlite:///database.db':
 app.config['SQLALCHEMY_DATABASE_URI'] = DB_PATH
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-in-production')  # ИЗМЕНИТЕ!
+app.config['SMTP_HOST'] = os.getenv('SMTP_HOST', '').strip()
+app.config['SMTP_PORT'] = int(os.getenv('SMTP_PORT', '587'))
+app.config['SMTP_USERNAME'] = os.getenv('SMTP_USERNAME', '').strip()
+app.config['SMTP_PASSWORD'] = os.getenv('SMTP_PASSWORD', '')
+app.config['SMTP_FROM_EMAIL'] = os.getenv('SMTP_FROM_EMAIL', '').strip()
+app.config['SMTP_USE_TLS'] = os.getenv('SMTP_USE_TLS', 'true').lower() in {'1', 'true', 'yes', 'on'}
+app.config['SMTP_USE_SSL'] = os.getenv('SMTP_USE_SSL', 'false').lower() in {'1', 'true', 'yes', 'on'}
+app.config['EMAIL_VERIFICATION_TTL_MINUTES'] = int(os.getenv('EMAIL_VERIFICATION_TTL_MINUTES', '15'))
+app.config['EMAIL_VERIFICATION_MAX_ATTEMPTS'] = int(os.getenv('EMAIL_VERIFICATION_MAX_ATTEMPTS', '5'))
 
 # Папка для загрузок
 UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
@@ -45,7 +80,28 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
 # Создать папку для загрузок
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+BACKUP_FOLDER = os.getenv('BACKUP_FOLDER', os.path.join(app.instance_path, 'backups'))
+if not os.path.isabs(BACKUP_FOLDER):
+    BACKUP_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), BACKUP_FOLDER)
+app.config['BACKUP_FOLDER'] = BACKUP_FOLDER
+os.makedirs(app.config['BACKUP_FOLDER'], exist_ok=True)
+
 db = SQLAlchemy(app)
+
+ORDER_STATUS_AWAITING_CONFIRMATION = 'Замовлення очікує підтвердження менеджером'
+ORDER_STATUS_AWAITING_PREPAYMENT = 'Замовлення очікує на передплату'
+ORDER_STATUS_ACCEPTED = 'Замовлення прийнято, очікуйте номер ТТН'
+ORDER_STATUS_PREPAYMENT_CONFIRMED = 'Передплата підтверджена та замовлення прийнято. Очікуйте номер ТТН'
+ORDER_STATUS_PAYMENT_CONFIRMED = 'Оплата підтверджена та замовлення прийнято. Очікуйте номер ТТН'
+ORDER_STATUS_IN_DELIVERY = 'Замовлення у процесі доставки'
+ORDER_STATUS_AWAITING_AT_POST = 'Замовлення очікує Вас на пошті!'
+ORDER_STATUS_RECEIVED = 'Отримано'
+ORDER_STATUS_REFUSED = 'Відмова'
+
+# ===== GOOGLE OAUTH КОНФИГУРАЦИЯ =====
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', 'your-google-client-id')
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', 'your-google-client-secret')
+GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:5000/auth/google/callback')
 
 # ===== МОДЕЛИ БД =====
 class User(db.Model):
@@ -55,6 +111,27 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
     telegram_id = db.Column(db.String(100), unique=True, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class PendingEmailVerification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), nullable=False)
+    email = db.Column(db.String(120), nullable=False, index=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    verification_code_hash = db.Column(db.String(255), nullable=False)
+    attempts = db.Column(db.Integer, nullable=False, default=0)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class PendingPasswordReset(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), nullable=False, index=True)
+    reset_code_hash = db.Column(db.String(255), nullable=False)
+    reset_token_hash = db.Column(db.String(255), nullable=True)
+    attempts = db.Column(db.Integer, nullable=False, default=0)
+    is_verified = db.Column(db.Boolean, nullable=False, default=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class UserProfile(db.Model):
@@ -77,6 +154,7 @@ class ChatMessage(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     sender = db.Column(db.String(20), nullable=False)  # 'user' или 'admin'
     message = db.Column(db.Text, nullable=False)
+    image_filename = db.Column(db.String(255), nullable=True)
     is_read = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     user = db.relationship('User', backref='chat_messages')
@@ -137,6 +215,7 @@ class Review(db.Model):
 
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    order_number = db.Column(db.String(50), unique=True, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     items_data = db.Column(db.Text, nullable=False)  # JSON с товарами
     total_price = db.Column(db.Float, nullable=False)
@@ -146,12 +225,16 @@ class Order(db.Model):
     delivery_method = db.Column(db.String(50), nullable=False)  # 'postal', 'courier', etc.
     postal_branch_number = db.Column(db.String(20), nullable=True)
     payment_method = db.Column(db.String(50), nullable=False)  # 'cod', 'card', etc.
-    status = db.Column(db.String(50), default='pending')  # 'pending', 'confirmed', 'shipped', 'delivered', 'cancelled'
+    status = db.Column(db.String(160), default=ORDER_STATUS_AWAITING_CONFIRMATION)
+    tracking_number = db.Column(db.String(100), nullable=True)
+    prepayment_received = db.Column(db.Boolean, default=False)
+    prepayment_amount = db.Column(db.Float, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     user = db.relationship('User', backref='orders')
 
 class GuestOrder(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    order_number = db.Column(db.String(50), unique=True, nullable=False)
     guest_phone = db.Column(db.String(50), nullable=False)
     guest_name = db.Column(db.String(200), nullable=False)
     guest_city = db.Column(db.String(100), nullable=False)
@@ -160,7 +243,10 @@ class GuestOrder(db.Model):
     delivery_method = db.Column(db.String(50), nullable=False)  # 'postal', 'courier', etc.
     postal_branch_number = db.Column(db.String(20), nullable=True)
     payment_method = db.Column(db.String(50), nullable=False)  # 'cod', 'card', etc.
-    status = db.Column(db.String(50), default='pending')  # 'pending', 'confirmed', 'shipped', 'delivered', 'cancelled'
+    status = db.Column(db.String(160), default=ORDER_STATUS_AWAITING_CONFIRMATION)
+    tracking_number = db.Column(db.String(100), nullable=True)
+    prepayment_received = db.Column(db.Boolean, default=False)
+    prepayment_amount = db.Column(db.Float, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class GuestChatMessage(db.Model):
@@ -174,6 +260,806 @@ class GuestChatMessage(db.Model):
 
 # ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
 from werkzeug.security import generate_password_hash, check_password_hash
+
+EMAIL_REGEX = re.compile(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
+USERNAME_REGEX = re.compile(r'^[A-Za-zА-Яа-яЁёІіЇїЄєҐґ0-9_.-]{3,30}$')
+
+
+def normalize_email(email):
+    return (email or '').strip().lower()
+
+
+def find_user_by_email(email):
+    normalized_email = normalize_email(email)
+    if not normalized_email:
+        return None
+    return User.query.filter(db.func.lower(User.email) == normalized_email).first()
+
+
+def ensure_admin_user_from_env():
+    admin_email = normalize_email(os.getenv('ADMIN_EMAIL'))
+    admin_password = os.getenv('ADMIN_PASSWORD') or ''
+    admin_username = (os.getenv('ADMIN_USERNAME') or 'admin').strip() or 'admin'
+
+    if not admin_email or not admin_password:
+        logger.info('Admin bootstrap skipped: ADMIN_EMAIL and ADMIN_PASSWORD are not configured')
+        return None
+
+    existing_admin = User.query.filter_by(is_admin=True).first()
+    if existing_admin:
+        logger.info('Admin bootstrap skipped: admin user already exists')
+        return existing_admin
+
+    existing_user = find_user_by_email(admin_email)
+    if existing_user:
+        existing_user.is_admin = True
+        if not existing_user.password_hash:
+            existing_user.password_hash = generate_password_hash(admin_password)
+        db.session.commit()
+        logger.info('Promoted existing user to admin from environment bootstrap: %s', admin_email)
+        return existing_user
+
+    unique_username = admin_username
+    suffix = 1
+    while User.query.filter_by(username=unique_username).first():
+        unique_username = f'{admin_username}_{suffix}'
+        suffix += 1
+
+    admin = User(
+        username=unique_username,
+        email=admin_email,
+        password_hash=generate_password_hash(admin_password),
+        is_admin=True
+    )
+    db.session.add(admin)
+    db.session.commit()
+    logger.info('Created bootstrap admin from environment: %s', admin_email)
+    return admin
+
+
+def validate_registration_payload(data):
+    if not isinstance(data, dict):
+        return None, None, None, 'Missing required fields: email, password, username'
+
+    username = (data.get('username') or '').strip()
+    email = normalize_email(data.get('email'))
+    password = data.get('password') or ''
+
+    if not username or not email or not password:
+        return None, None, None, 'Missing required fields: email, password, username'
+
+    if not USERNAME_REGEX.fullmatch(username):
+        return None, None, None, 'Username must be 3-30 characters and contain only letters, numbers, dot, underscore or hyphen'
+
+    if not EMAIL_REGEX.fullmatch(email):
+        return None, None, None, 'Enter a valid email address'
+
+    return username, email, password, None
+
+
+def cleanup_expired_pending_verifications():
+    PendingEmailVerification.query.filter(
+        PendingEmailVerification.expires_at < datetime.utcnow()
+    ).delete(synchronize_session=False)
+    PendingPasswordReset.query.filter(
+        PendingPasswordReset.expires_at < datetime.utcnow()
+    ).delete(synchronize_session=False)
+    db.session.commit()
+
+
+def ensure_email_delivery_configured():
+    if not app.config['SMTP_HOST'] or not app.config['SMTP_FROM_EMAIL']:
+        raise RuntimeError('Email delivery is not configured on the server')
+
+
+def get_email_delivery_status():
+    smtp_username = app.config['SMTP_USERNAME']
+    smtp_from_email = app.config['SMTP_FROM_EMAIL']
+    return {
+        'host': app.config['SMTP_HOST'],
+        'port': app.config['SMTP_PORT'],
+        'username_configured': bool(smtp_username),
+        'from_email_configured': bool(smtp_from_email),
+        'use_tls': app.config['SMTP_USE_TLS'],
+        'use_ssl': app.config['SMTP_USE_SSL'],
+    }
+
+
+def generate_email_verification_code():
+    return f'{random.randint(0, 999999):06d}'
+
+
+def generate_password_reset_token():
+    return uuid.uuid4().hex
+
+
+def create_or_update_pending_verification(username, email, password):
+    verification_code = generate_email_verification_code()
+    expires_at = datetime.utcnow() + timedelta(minutes=app.config['EMAIL_VERIFICATION_TTL_MINUTES'])
+    pending = PendingEmailVerification.query.filter_by(email=email).first()
+
+    if pending:
+        pending.username = username
+        pending.password_hash = generate_password_hash(password)
+        pending.verification_code_hash = generate_password_hash(verification_code)
+        pending.attempts = 0
+        pending.expires_at = expires_at
+        pending.created_at = datetime.utcnow()
+    else:
+        pending = PendingEmailVerification(
+            username=username,
+            email=email,
+            password_hash=generate_password_hash(password),
+            verification_code_hash=generate_password_hash(verification_code),
+            expires_at=expires_at
+        )
+        db.session.add(pending)
+
+    return pending, verification_code
+
+
+def create_or_update_password_reset(email):
+    reset_code = generate_email_verification_code()
+    expires_at = datetime.utcnow() + timedelta(minutes=app.config['EMAIL_VERIFICATION_TTL_MINUTES'])
+    pending = PendingPasswordReset.query.filter_by(email=email).first()
+
+    if pending:
+        pending.reset_code_hash = generate_password_hash(reset_code)
+        pending.reset_token_hash = None
+        pending.attempts = 0
+        pending.is_verified = False
+        pending.expires_at = expires_at
+        pending.created_at = datetime.utcnow()
+    else:
+        pending = PendingPasswordReset(
+            email=email,
+            reset_code_hash=generate_password_hash(reset_code),
+            expires_at=expires_at
+        )
+        db.session.add(pending)
+
+    return pending, reset_code
+
+
+def send_email_verification_code(recipient_email, code):
+    ensure_email_delivery_configured()
+
+    message = EmailMessage()
+    message['Subject'] = 'Email verification code'
+    message['From'] = app.config['SMTP_FROM_EMAIL']
+    message['To'] = recipient_email
+    ttl_minutes = app.config['EMAIL_VERIFICATION_TTL_MINUTES']
+    message.set_content(
+        f'Your verification code is: {code}\n\n'
+        f'The code is valid for {ttl_minutes} minutes.\n'
+        'If you did not request registration, just ignore this email.'
+    )
+
+    smtp_host = app.config['SMTP_HOST']
+    smtp_port = app.config['SMTP_PORT']
+    smtp_username = app.config['SMTP_USERNAME']
+    smtp_password = app.config['SMTP_PASSWORD']
+
+    if app.config['SMTP_USE_SSL']:
+        with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20) as server:
+            if smtp_username:
+                server.login(smtp_username, smtp_password)
+            server.send_message(message)
+        return
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
+        server.ehlo()
+        if app.config['SMTP_USE_TLS']:
+            server.starttls()
+            server.ehlo()
+        if smtp_username:
+            server.login(smtp_username, smtp_password)
+        server.send_message(message)
+
+
+def send_password_reset_code(recipient_email, code):
+    ensure_email_delivery_configured()
+
+    message = EmailMessage()
+    message['Subject'] = 'Password reset code'
+    message['From'] = app.config['SMTP_FROM_EMAIL']
+    message['To'] = recipient_email
+    ttl_minutes = app.config['EMAIL_VERIFICATION_TTL_MINUTES']
+    message.set_content(
+        f'Your password reset code is: {code}\n\n'
+        f'The code is valid for {ttl_minutes} minutes.\n'
+        'If you did not request a password reset, ignore this email.'
+    )
+
+    smtp_host = app.config['SMTP_HOST']
+    smtp_port = app.config['SMTP_PORT']
+    smtp_username = app.config['SMTP_USERNAME']
+    smtp_password = app.config['SMTP_PASSWORD']
+
+    if app.config['SMTP_USE_SSL']:
+        with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20) as server:
+            if smtp_username:
+                server.login(smtp_username, smtp_password)
+            server.send_message(message)
+        return
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
+        server.ehlo()
+        if app.config['SMTP_USE_TLS']:
+            server.starttls()
+            server.ehlo()
+        if smtp_username:
+            server.login(smtp_username, smtp_password)
+        server.send_message(message)
+
+ALLOWED_ORDER_STATUSES = {
+    'Замовлення очікує підтвердження менеджером',
+    'Замовлення прийнято, очікуйте номер ТТН',
+    'Замовлення у процесі доставки',
+    'Отримано',
+    'Відмова'
+}
+
+DELIVERY_STATUS = 'Замовлення у процесі доставки'
+ALLOWED_CHAT_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp', 'gif', 'avif', 'heic', 'heif'}
+
+ALLOWED_ORDER_STATUSES = {
+    ORDER_STATUS_AWAITING_CONFIRMATION,
+    ORDER_STATUS_AWAITING_PREPAYMENT,
+    ORDER_STATUS_ACCEPTED,
+    ORDER_STATUS_PREPAYMENT_CONFIRMED,
+    ORDER_STATUS_PAYMENT_CONFIRMED,
+    ORDER_STATUS_IN_DELIVERY,
+    ORDER_STATUS_AWAITING_AT_POST,
+    ORDER_STATUS_RECEIVED,
+    ORDER_STATUS_REFUSED
+}
+
+DELIVERY_STATUS = ORDER_STATUS_IN_DELIVERY
+LEGACY_ORDER_STATUS_MAP = {
+    'pending': ORDER_STATUS_AWAITING_CONFIRMATION,
+    'замовлення очікує підтвердження менеджером': ORDER_STATUS_AWAITING_CONFIRMATION,
+    'замовлення очікує на передплату': ORDER_STATUS_AWAITING_PREPAYMENT,
+    'confirmed': ORDER_STATUS_ACCEPTED,
+    'замовлення прийнято, очікуйте номер ттн': ORDER_STATUS_ACCEPTED,
+    'передплата підтверджена та замовлення прийнято. очікуйте номер ттн': ORDER_STATUS_PREPAYMENT_CONFIRMED,
+    'оплата підтверджена та замовлення прийнято. очікуйте номер ттн': ORDER_STATUS_PAYMENT_CONFIRMED,
+    'shipped': ORDER_STATUS_IN_DELIVERY,
+    'замовлення у процесі доставки': ORDER_STATUS_IN_DELIVERY,
+    'замовлення очікує вас на пошті!': ORDER_STATUS_AWAITING_AT_POST,
+    'delivered': ORDER_STATUS_RECEIVED,
+    'отримано': ORDER_STATUS_RECEIVED,
+    'cancelled': ORDER_STATUS_REFUSED,
+    'відмова': ORDER_STATUS_REFUSED,
+}
+
+def generate_order_number(prefix='ORD'):
+    """Генерирует уникальный номер заказа"""
+    prefix_alias = {
+        'ORD': 'OR',
+        'GUEST': 'GU'
+    }.get(prefix, (prefix or 'OR')[:2].upper())
+
+    while True:
+        order_number = f"{prefix_alias}-{datetime.utcnow().strftime('%y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
+        if not Order.query.filter_by(order_number=order_number).first() and not GuestOrder.query.filter_by(order_number=order_number).first():
+            return order_number
+
+
+def normalize_order_status(status):
+    normalized = (status or '').strip()
+    if not normalized:
+        return ORDER_STATUS_AWAITING_CONFIRMATION
+
+    return LEGACY_ORDER_STATUS_MAP.get(normalized.lower(), normalized)
+
+
+def normalize_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {'1', 'true', 'yes', 'on'}
+    return False
+
+
+def normalize_money_value(value):
+    if value in (None, ''):
+        return None
+    try:
+        return round(float(value), 2)
+    except (TypeError, ValueError):
+        return None
+
+
+def serialize_utc_datetime(value):
+    if not value:
+        return None
+    return value.replace(microsecond=0).isoformat() + 'Z'
+
+
+def get_amount_due(total_price, prepayment_amount):
+    total = normalize_money_value(total_price) or 0.0
+    prepayment = normalize_money_value(prepayment_amount) or 0.0
+    return round(max(total - prepayment, 0.0), 2)
+
+
+def format_receipt_money(amount):
+    normalized = normalize_money_value(amount) or 0.0
+    if float(normalized).is_integer():
+        return f'{int(normalized)} грн'
+    return f'{normalized:.2f} грн'
+
+
+def build_receipt_total_html(total_price, prepayment_amount=None):
+    total_text = format_receipt_money(total_price)
+    due_text = format_receipt_money(get_amount_due(total_price, prepayment_amount))
+    prepayment_value = normalize_money_value(prepayment_amount)
+    prepayment_html = ''
+    if prepayment_value and prepayment_value > 0:
+        prepayment_html = (
+            f'<span class="order-receipt-summary-row">'
+            f'<span>Передплата:</span><strong>{format_receipt_money(prepayment_value)}</strong>'
+            f'</span>'
+        )
+
+    return (
+        '<div class="order-receipt-total">'
+        f'<span class="order-receipt-summary-row"><span>Загальна сума:</span><strong>{total_text}</strong></span>'
+        f'{prepayment_html}'
+        f'<span class="order-receipt-summary-row"><span>До сплати:</span><strong>{due_text}</strong></span>'
+        '</div>'
+    )
+
+
+def get_receipt_status_class(status):
+    normalized = (status or '').strip().lower()
+    status_map = {
+        'pending': 'awaiting-confirmation',
+        'замовлення очікує підтвердження менеджером': 'awaiting-confirmation',
+        'confirmed': 'accepted',
+        'замовлення прийнято, очікуйте номер ттн': 'accepted',
+        'shipped': 'in-delivery',
+        'замовлення у процесі доставки': 'in-delivery',
+        'delivered': 'received',
+        'отримано': 'received',
+        'cancelled': 'refused',
+        'відмова': 'refused',
+    }
+    return status_map.get(normalized, 'awaiting-confirmation')
+
+
+def append_tracking_to_receipt_html(message, tracking_number):
+    if not message or 'order-receipt' not in message or not tracking_number:
+        return message
+
+    if 'ТТН:' in message:
+        return re.sub(
+            r'(<div class="order-receipt-note"><strong>ТТН:</strong>\s*)(.*?)(</div>)',
+            rf'\1{tracking_number}\3',
+            message,
+            count=1,
+            flags=re.IGNORECASE | re.DOTALL
+        )
+
+    tracking_html = f'<div class="order-receipt-note"><strong>ТТН:</strong> {tracking_number}</div>'
+    if '<div class="order-receipt-total">' in message:
+        return message.replace('<div class="order-receipt-total">', f'{tracking_html}<div class="order-receipt-total">', 1)
+
+    return f'{message}{tracking_html}'
+
+
+def append_status_to_receipt_html(message, status):
+    if not message or 'order-receipt' not in message or not status:
+        return message
+
+    status_class = get_receipt_status_class(status)
+    status_html = (
+        f'<div class="order-receipt-status-row">'
+        f'<span class="order-receipt-status-label">Статус замовлення:</span>'
+        f'<span class="order-status-badge {status_class}">{status}</span>'
+        f'</div>'
+    )
+
+    if 'Статус замовлення:' in message:
+        return re.sub(
+            r'<div class="order-receipt-status-row">.*?</div>',
+            status_html,
+            message,
+            count=1,
+            flags=re.DOTALL
+        )
+
+    if '<div class="order-receipt-total">' in message:
+        return message.replace('<div class="order-receipt-total">', f'{status_html}<div class="order-receipt-total">', 1)
+
+    return f'{message}{status_html}'
+
+
+def get_receipt_status_class(status):
+    normalized = normalize_order_status(status).strip().lower()
+    status_map = {
+        'замовлення очікує підтвердження менеджером': 'awaiting-confirmation',
+        'замовлення очікує на передплату': 'awaiting-confirmation',
+        'замовлення прийнято, очікуйте номер ттн': 'accepted',
+        'передплата підтверджена та замовлення прийнято. очікуйте номер ттн': 'accepted',
+        'оплата підтверджена та замовлення прийнято. очікуйте номер ттн': 'accepted',
+        'замовлення у процесі доставки': 'in-delivery',
+        'замовлення очікує вас на пошті!': 'in-delivery',
+        'отримано': 'received',
+        'відмова': 'refused',
+    }
+    return status_map.get(normalized, 'awaiting-confirmation')
+
+
+def append_status_to_receipt_html(message, status):
+    if not message or 'order-receipt' not in message or not status:
+        return message
+
+    normalized_status = normalize_order_status(status)
+    status_class = get_receipt_status_class(normalized_status)
+    status_html = (
+        f'<div class="order-receipt-status-row">'
+        f'<span class="order-receipt-status-label">Статус замовлення:</span>'
+        f'<span class="order-status-badge {status_class}">{normalized_status}</span>'
+        f'</div>'
+    )
+
+    if 'Статус замовлення:' in message:
+        return re.sub(
+            r'<div class="order-receipt-status-row">.*?</div>',
+            status_html,
+            message,
+            count=1,
+            flags=re.DOTALL
+        )
+
+    if '<div class="order-receipt-total">' in message:
+        return message.replace('<div class="order-receipt-total">', f'{status_html}<div class="order-receipt-total">', 1)
+
+    return f'{message}{status_html}'
+
+
+def append_prepayment_to_receipt_html(message, total_price, prepayment_amount=None):
+    if not message or 'order-receipt' not in message:
+        return message
+
+    total_html = build_receipt_total_html(total_price, prepayment_amount)
+    if '<div class="order-receipt-total">' not in message:
+        return f'{message}{total_html}'
+
+    return re.sub(
+        r'<div class="order-receipt-total">.*?</div>',
+        total_html,
+        message,
+        count=1,
+        flags=re.DOTALL
+    )
+
+
+def inject_order_fields_into_receipt(message, order):
+    if not message or 'order-receipt' not in message or not order:
+        return message
+
+    updated_message = append_prepayment_to_receipt_html(
+        message,
+        order.total_price,
+        order.prepayment_amount if getattr(order, 'prepayment_received', False) else None
+    )
+    updated_message = append_status_to_receipt_html(updated_message, getattr(order, 'status', None))
+    return append_tracking_to_receipt_html(updated_message, getattr(order, 'tracking_number', None))
+
+
+def inject_tracking_into_order_message(message, user_id=None):
+    if not message or 'order-receipt' not in message:
+        return message
+
+    match = re.search(r'Чек замовлення(?:\s*№)?\s*([^<]+)', message)
+    if not match:
+        return message
+
+    order_number = match.group(1).strip()
+    order_query = Order.query.filter_by(order_number=order_number)
+    if user_id is not None:
+        order_query = order_query.filter_by(user_id=user_id)
+
+    order = order_query.first()
+    if not order:
+        return message
+
+    return inject_order_fields_into_receipt(message, order)
+
+
+def inject_guest_order_fields_into_message(message):
+    if not message or 'order-receipt' not in message:
+        return message
+
+    match = re.search(r'Чек замовлення(?:\s*№)?\s*([^<]+)', message)
+    if not match:
+        return message
+
+    order_number = match.group(1).strip()
+    order = GuestOrder.query.filter_by(order_number=order_number).first()
+    if not order:
+        return message
+
+    return inject_order_fields_into_receipt(message, order)
+
+
+def is_allowed_chat_image(filename):
+    if not filename or '.' not in filename:
+        return False
+    return filename.rsplit('.', 1)[1].lower() in ALLOWED_CHAT_IMAGE_EXTENSIONS
+
+
+def save_chat_image(file_storage):
+    if not file_storage or not file_storage.filename:
+        return None
+
+    original_name = secure_filename(file_storage.filename)
+    if not original_name or not is_allowed_chat_image(original_name):
+        raise ValueError('Дозволені лише зображення формату PNG, JPG, WEBP, GIF, AVIF або HEIC.')
+
+    mime_type = (file_storage.mimetype or '').lower()
+    if mime_type and not mime_type.startswith('image/'):
+        raise ValueError('Можна завантажувати лише файли зображень.')
+
+    extension = os.path.splitext(original_name)[1].lower()
+    filename = f'chat_{uuid.uuid4().hex}{extension}'
+    file_storage.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+    return filename
+
+
+def remove_uploaded_file(filename):
+    if not filename:
+        return
+
+    upload_dir = os.path.abspath(app.config['UPLOAD_FOLDER'])
+    file_path = os.path.abspath(os.path.join(upload_dir, filename))
+    if not file_path.startswith(upload_dir + os.sep) and file_path != upload_dir:
+        return
+
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+    except OSError as error:
+        app.logger.warning('Не вдалося видалити файл %s: %s', filename, error)
+
+
+def get_chat_submission_payload():
+    text = ''
+    image_file = None
+
+    if request.files:
+        image_file = request.files.get('image')
+        text = request.form.get('message', '')
+    else:
+        data = request.get_json(silent=True) or {}
+        text = data.get('message', '')
+
+    return (text or '').strip(), image_file
+
+
+def is_sqlite_database():
+    return db.engine.url.drivername.startswith('sqlite')
+
+
+def get_database_file_path():
+    database_path = db.engine.url.database
+    if not database_path or database_path == ':memory:':
+        return None
+    return os.path.abspath(database_path)
+
+
+def read_backup_manifest(archive_path):
+    try:
+        with zipfile.ZipFile(archive_path, 'r') as archive:
+            if 'backup_manifest.json' not in archive.namelist():
+                return None
+            with archive.open('backup_manifest.json') as manifest_file:
+                return json.load(manifest_file)
+    except (OSError, zipfile.BadZipFile, json.JSONDecodeError):
+        return None
+
+
+def collect_backup_stats():
+    return {
+        'users': User.query.count(),
+        'user_profiles': UserProfile.query.count(),
+        'contact_messages': ContactMessage.query.count(),
+        'chat_messages': ChatMessage.query.count(),
+        'guest_chat_messages': GuestChatMessage.query.count(),
+        'categories': Category.query.count(),
+        'products': Product.query.count(),
+        'product_images': ProductImage.query.count(),
+        'banners': Banner.query.count(),
+        'reviews': Review.query.count(),
+        'orders': Order.query.count(),
+        'guest_orders': GuestOrder.query.count()
+    }
+
+
+def build_backup_manifest(source='manual'):
+    database_path = get_database_file_path()
+    upload_dir = os.path.abspath(app.config['UPLOAD_FOLDER'])
+    uploads_count = 0
+
+    if os.path.isdir(upload_dir):
+        uploads_count = sum(1 for item in Path(upload_dir).rglob('*') if item.is_file())
+
+    return {
+        'backup_version': 1,
+        'created_at': datetime.utcnow().replace(microsecond=0).isoformat() + 'Z',
+        'source': source,
+        'environment': ENV,
+        'database': {
+            'driver': db.engine.url.drivername,
+            'filename': os.path.basename(database_path) if database_path else None
+        },
+        'uploads': {
+            'folder_name': os.path.basename(upload_dir),
+            'files_count': uploads_count
+        },
+        'entities': collect_backup_stats()
+    }
+
+
+def build_backup_response(archive_path):
+    stats = os.stat(archive_path)
+    manifest = read_backup_manifest(archive_path) or {}
+    filename = os.path.basename(archive_path)
+
+    return {
+        'filename': filename,
+        'size_bytes': stats.st_size,
+        'created_at': datetime.utcfromtimestamp(stats.st_mtime).replace(microsecond=0).isoformat() + 'Z',
+        'manifest': manifest,
+        'download_url': f'/api/admin/backups/{filename}/download'
+    }
+
+
+def create_backup_archive(source='manual', prefix='backup'):
+    if not is_sqlite_database():
+        raise ValueError('Automatic backups are currently supported only for SQLite.')
+
+    database_path = get_database_file_path()
+    if not database_path or not os.path.exists(database_path):
+        raise ValueError('Database file not found for backup.')
+
+    timestamp = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+    archive_filename = f'{prefix}-{timestamp}-{uuid.uuid4().hex[:6]}.zip'
+    archive_path = os.path.join(app.config['BACKUP_FOLDER'], archive_filename)
+    manifest = build_backup_manifest(source=source)
+
+    db.session.remove()
+    db.engine.dispose()
+
+    with zipfile.ZipFile(archive_path, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(
+            'backup_manifest.json',
+            json.dumps(manifest, ensure_ascii=False, indent=2)
+        )
+        archive.write(database_path, arcname=f"database/{os.path.basename(database_path)}")
+
+        upload_dir = os.path.abspath(app.config['UPLOAD_FOLDER'])
+        if os.path.isdir(upload_dir):
+            for file_path in Path(upload_dir).rglob('*'):
+                if file_path.is_file():
+                    relative_path = file_path.relative_to(upload_dir).as_posix()
+                    archive.write(str(file_path), arcname=f'uploads/{relative_path}')
+
+    return archive_path
+
+
+def extract_backup_archive(archive_path, destination_dir):
+    destination_dir = os.path.abspath(destination_dir)
+    with zipfile.ZipFile(archive_path, 'r') as archive:
+        for member in archive.infolist():
+            target_path = os.path.abspath(os.path.join(destination_dir, member.filename))
+            if not target_path.startswith(destination_dir + os.sep) and target_path != destination_dir:
+                raise ValueError('Backup archive contains unsafe paths.')
+        archive.extractall(destination_dir)
+
+
+def restore_backup_archive(archive_path):
+    if not is_sqlite_database():
+        raise ValueError('Automatic restore is currently supported only for SQLite.')
+
+    database_path = get_database_file_path()
+    if not database_path:
+        raise ValueError('Database file path is not available.')
+
+    restore_point_path = create_backup_archive(source='pre_restore', prefix='pre-restore')
+
+    with tempfile.TemporaryDirectory(prefix='backup-restore-') as temp_dir:
+        extract_backup_archive(archive_path, temp_dir)
+
+        manifest = {}
+        manifest_path = os.path.join(temp_dir, 'backup_manifest.json')
+        if os.path.exists(manifest_path):
+            with open(manifest_path, 'r', encoding='utf-8') as manifest_file:
+                manifest = json.load(manifest_file)
+
+        extracted_database_path = None
+        extracted_database_dir = os.path.join(temp_dir, 'database')
+        if os.path.isdir(extracted_database_dir):
+            for item in Path(extracted_database_dir).iterdir():
+                if item.is_file():
+                    extracted_database_path = str(item)
+                    break
+
+        if not extracted_database_path or not os.path.exists(extracted_database_path):
+            raise ValueError('Backup archive does not contain a database file.')
+
+        extracted_uploads_dir = os.path.join(temp_dir, 'uploads')
+        upload_dir = os.path.abspath(app.config['UPLOAD_FOLDER'])
+
+        db.session.remove()
+        db.engine.dispose()
+
+        os.makedirs(os.path.dirname(database_path), exist_ok=True)
+        shutil.copy2(extracted_database_path, database_path)
+
+        if os.path.isdir(extracted_uploads_dir):
+            if os.path.isdir(upload_dir):
+                shutil.rmtree(upload_dir)
+            shutil.copytree(extracted_uploads_dir, upload_dir)
+        else:
+            os.makedirs(upload_dir, exist_ok=True)
+
+    db.session.remove()
+    db.engine.dispose()
+
+    return manifest, restore_point_path
+
+
+def get_bootstrap_archive_path():
+    configured_path = (os.getenv('BOOTSTRAP_ARCHIVE_PATH') or '').strip()
+    if configured_path:
+        archive_path = Path(configured_path)
+        if not archive_path.is_absolute():
+            archive_path = PROJECT_ROOT / archive_path
+        return archive_path
+
+    return PROJECT_ROOT / 'bootstrap' / 'render-seed.zip'
+
+
+def restore_bundled_backup_if_database_empty():
+    archive_path = get_bootstrap_archive_path()
+    if not archive_path.exists():
+        logger.info('Bootstrap restore skipped: archive not found at %s', archive_path)
+        return False
+
+    try:
+        if Category.query.count() or Product.query.count() or Banner.query.count():
+            logger.info('Bootstrap restore skipped: database already contains catalog data')
+            return False
+
+        logger.info('Bootstrap restore started from %s', archive_path)
+        manifest, _ = restore_backup_archive(str(archive_path))
+        logger.info('Bootstrap restore finished successfully: %s', manifest)
+        return True
+    except Exception as error:
+        db.session.rollback()
+        logger.exception('Bootstrap restore failed: %s', error)
+        return False
+
+
+def serialize_chat_message(message, viewer_user_id=None):
+    raw_message = message.message or ''
+    prepared_message = inject_tracking_into_order_message(raw_message, viewer_user_id) if raw_message else ''
+    image_filename = getattr(message, 'image_filename', None)
+
+    return {
+        'id': message.id,
+        'user_id': message.user_id,
+        'sender': message.sender,
+        'message': prepared_message,
+        'image_url': f'/uploads/{image_filename}' if image_filename else None,
+        'created_at': message.created_at.replace(microsecond=0).isoformat() + 'Z'
+    }
+
 
 def create_token(user_id, expires_in=24):
     """Создает JWT токен"""
@@ -227,30 +1113,273 @@ def register():
     try:
         data = request.json
         logger.info(f"Register data: {data}")
-        
-        if not data or 'email' not in data or 'password' not in data or 'username' not in data:
-            logger.error("Missing required fields")
-            return jsonify({'error': 'Missing required fields: email, password, username'}), 400
-        
-        if User.query.filter_by(email=data['email']).first():
-            logger.info(f"Email {data['email']} already registered")
+
+        username, email, password, validation_error = validate_registration_payload(data)
+        if validation_error:
+            logger.error("Registration validation failed: %s", validation_error)
+            return jsonify({'error': validation_error}), 400
+
+        cleanup_expired_pending_verifications()
+
+        if find_user_by_email(email):
+            logger.info(f"Email {email} already registered")
             return jsonify({'error': 'Email already registered'}), 400
-        
-        user = User(
-            username=data['username'],
-            email=data['email'],
-            password_hash=generate_password_hash(data['password'])
-        )
-        db.session.add(user)
+
+        if User.query.filter_by(username=username).first():
+            logger.info(f"Username {username} already registered")
+            return jsonify({'error': 'Username already taken'}), 400
+
+        username_in_pending = PendingEmailVerification.query.filter(
+            PendingEmailVerification.username == username,
+            PendingEmailVerification.email != email,
+            PendingEmailVerification.expires_at >= datetime.utcnow()
+        ).first()
+        if username_in_pending:
+            return jsonify({'error': 'Username already reserved by another pending registration'}), 400
+
+        pending, verification_code = create_or_update_pending_verification(username, email, password)
+
+        send_email_verification_code(email, verification_code)
         db.session.commit()
-        
-        token = create_token(user.id)
-        logger.info(f"User registered successfully, id: {user.id}, token created")
-        return jsonify({'token': token, 'user_id': user.id}), 201
+
+        logger.info("Verification code sent to %s", email)
+        return jsonify({
+            'message': 'Verification code sent to email',
+            'email': email,
+            'expires_in_minutes': app.config['EMAIL_VERIFICATION_TTL_MINUTES']
+        }), 200
     except Exception as e:
         logger.error(f"Register error: {str(e)}", exc_info=True)
         db.session.rollback()
         return jsonify({'error': f'Registration failed: {str(e)}'}), 500
+
+
+@app.route('/api/auth/register/resend', methods=['POST'])
+def resend_registration_code():
+    logger.info("=== REGISTER RESEND ENDPOINT CALLED ===")
+    try:
+        data = request.json or {}
+        username, email, password, validation_error = validate_registration_payload(data)
+        if validation_error:
+            return jsonify({'error': validation_error}), 400
+
+        cleanup_expired_pending_verifications()
+
+        if find_user_by_email(email):
+            return jsonify({'error': 'Email already registered'}), 400
+
+        if User.query.filter_by(username=username).first():
+            return jsonify({'error': 'Username already taken'}), 400
+
+        username_in_pending = PendingEmailVerification.query.filter(
+            PendingEmailVerification.username == username,
+            PendingEmailVerification.email != email,
+            PendingEmailVerification.expires_at >= datetime.utcnow()
+        ).first()
+        if username_in_pending:
+            return jsonify({'error': 'Username already reserved by another pending registration'}), 400
+
+        _, verification_code = create_or_update_pending_verification(username, email, password)
+        send_email_verification_code(email, verification_code)
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Verification code resent to email',
+            'email': email,
+            'expires_in_minutes': app.config['EMAIL_VERIFICATION_TTL_MINUTES']
+        }), 200
+    except Exception as e:
+        logger.error(f"Register resend error: {str(e)}", exc_info=True)
+        db.session.rollback()
+        return jsonify({'error': f'Resending verification code failed: {str(e)}'}), 500
+
+
+@app.route('/api/auth/register/verify', methods=['POST'])
+def verify_registration():
+    logger.info("=== REGISTER VERIFY ENDPOINT CALLED ===")
+    try:
+        data = request.json or {}
+        email = normalize_email(data.get('email'))
+        code = (data.get('code') or '').strip()
+
+        if not email or not code:
+            return jsonify({'error': 'Email and verification code are required'}), 400
+
+        cleanup_expired_pending_verifications()
+
+        pending = PendingEmailVerification.query.filter_by(email=email).first()
+        if not pending:
+            return jsonify({'error': 'Verification request not found or expired'}), 404
+
+        if pending.expires_at < datetime.utcnow():
+            db.session.delete(pending)
+            db.session.commit()
+            return jsonify({'error': 'Verification code expired. Request a new one'}), 400
+
+        if pending.attempts >= app.config['EMAIL_VERIFICATION_MAX_ATTEMPTS']:
+            db.session.delete(pending)
+            db.session.commit()
+            return jsonify({'error': 'Too many invalid attempts. Request a new verification code'}), 400
+
+        if not check_password_hash(pending.verification_code_hash, code):
+            pending.attempts += 1
+            db.session.commit()
+            return jsonify({'error': 'Invalid verification code'}), 400
+
+        if find_user_by_email(email):
+            db.session.delete(pending)
+            db.session.commit()
+            return jsonify({'error': 'Email already registered'}), 400
+
+        if User.query.filter_by(username=pending.username).first():
+            db.session.delete(pending)
+            db.session.commit()
+            return jsonify({'error': 'Username already taken'}), 400
+
+        user = User(
+            username=pending.username,
+            email=pending.email,
+            password_hash=pending.password_hash
+        )
+        db.session.add(user)
+        db.session.flush()
+
+        PendingEmailVerification.query.filter_by(email=email).delete(synchronize_session=False)
+        db.session.commit()
+
+        token = create_token(user.id)
+        logger.info("User verified and registered successfully, id: %s", user.id)
+        return jsonify({'token': token, 'user_id': user.id, 'is_admin': user.is_admin}), 201
+    except Exception as e:
+        logger.error(f"Register verify error: {str(e)}", exc_info=True)
+        db.session.rollback()
+        return jsonify({'error': f'Email verification failed: {str(e)}'}), 500
+
+
+@app.route('/api/auth/password-reset/request', methods=['POST'])
+def request_password_reset():
+    logger.info("=== PASSWORD RESET REQUEST ENDPOINT CALLED ===")
+    try:
+        data = request.json or {}
+        email = normalize_email(data.get('email'))
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+
+        if not EMAIL_REGEX.fullmatch(email):
+            return jsonify({'error': 'Enter a valid email address'}), 400
+
+        cleanup_expired_pending_verifications()
+
+        user = find_user_by_email(email)
+        if not user:
+            return jsonify({'error': 'User with this email was not found'}), 404
+
+        _, reset_code = create_or_update_password_reset(email)
+        send_password_reset_code(email, reset_code)
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Password reset code sent to email',
+            'email': email,
+            'expires_in_minutes': app.config['EMAIL_VERIFICATION_TTL_MINUTES']
+        }), 200
+    except Exception as e:
+        logger.error(f"Password reset request error: {str(e)}", exc_info=True)
+        db.session.rollback()
+        return jsonify({'error': f'Password reset request failed: {str(e)}'}), 500
+
+
+@app.route('/api/auth/password-reset/verify', methods=['POST'])
+def verify_password_reset_code():
+    logger.info("=== PASSWORD RESET VERIFY ENDPOINT CALLED ===")
+    try:
+        data = request.json or {}
+        email = normalize_email(data.get('email'))
+        code = (data.get('code') or '').strip()
+
+        if not email or not code:
+            return jsonify({'error': 'Email and reset code are required'}), 400
+
+        cleanup_expired_pending_verifications()
+
+        pending = PendingPasswordReset.query.filter_by(email=email).first()
+        if not pending:
+            return jsonify({'error': 'Password reset request not found or expired'}), 404
+
+        if pending.expires_at < datetime.utcnow():
+            db.session.delete(pending)
+            db.session.commit()
+            return jsonify({'error': 'Reset code expired. Request a new one'}), 400
+
+        if pending.attempts >= app.config['EMAIL_VERIFICATION_MAX_ATTEMPTS']:
+            db.session.delete(pending)
+            db.session.commit()
+            return jsonify({'error': 'Too many invalid attempts. Request a new reset code'}), 400
+
+        if not check_password_hash(pending.reset_code_hash, code):
+            pending.attempts += 1
+            db.session.commit()
+            return jsonify({'error': 'Invalid reset code'}), 400
+
+        reset_token = generate_password_reset_token()
+        pending.reset_token_hash = generate_password_hash(reset_token)
+        pending.is_verified = True
+        pending.attempts = 0
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Reset code confirmed',
+            'reset_token': reset_token,
+            'email': email
+        }), 200
+    except Exception as e:
+        logger.error(f"Password reset verify error: {str(e)}", exc_info=True)
+        db.session.rollback()
+        return jsonify({'error': f'Password reset verification failed: {str(e)}'}), 500
+
+
+@app.route('/api/auth/password-reset/confirm', methods=['POST'])
+def confirm_password_reset():
+    logger.info("=== PASSWORD RESET CONFIRM ENDPOINT CALLED ===")
+    try:
+        data = request.json or {}
+        email = normalize_email(data.get('email'))
+        reset_token = (data.get('reset_token') or '').strip()
+        new_password = data.get('new_password') or ''
+
+        if not email or not reset_token or not new_password:
+            return jsonify({'error': 'Email, reset token and new password are required'}), 400
+
+        cleanup_expired_pending_verifications()
+
+        pending = PendingPasswordReset.query.filter_by(email=email).first()
+        if not pending or pending.expires_at < datetime.utcnow():
+            if pending:
+                db.session.delete(pending)
+                db.session.commit()
+            return jsonify({'error': 'Password reset request not found or expired'}), 404
+
+        if not pending.is_verified or not pending.reset_token_hash:
+            return jsonify({'error': 'Reset code must be confirmed first'}), 400
+
+        if not check_password_hash(pending.reset_token_hash, reset_token):
+            return jsonify({'error': 'Invalid password reset session'}), 400
+
+        user = find_user_by_email(email)
+        if not user:
+            db.session.delete(pending)
+            db.session.commit()
+            return jsonify({'error': 'User with this email was not found'}), 404
+
+        user.password_hash = generate_password_hash(new_password)
+        db.session.delete(pending)
+        db.session.commit()
+
+        return jsonify({'message': 'Password updated successfully'}), 200
+    except Exception as e:
+        logger.error(f"Password reset confirm error: {str(e)}", exc_info=True)
+        db.session.rollback()
+        return jsonify({'error': f'Password reset failed: {str(e)}'}), 500
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
@@ -262,15 +1391,16 @@ def login():
         if not data or 'email' not in data or 'password' not in data:
             logger.error("Missing email or password")
             return jsonify({'error': 'Missing email or password'}), 400
-        
-        user = User.query.filter_by(email=data['email']).first()
+
+        email = normalize_email(data['email'])
+        user = find_user_by_email(email)
         
         if not user:
-            logger.warning(f"User not found: {data['email']}")
+            logger.warning(f"User not found: {email}")
             return jsonify({'error': 'Invalid credentials'}), 401
         
         if not check_password_hash(user.password_hash, data['password']):
-            logger.warning(f"Wrong password for user: {data['email']}")
+            logger.warning(f"Wrong password for user: {email}")
             return jsonify({'error': 'Invalid credentials'}), 401
         
         token = create_token(user.id)
@@ -394,18 +1524,19 @@ def get_user_chat():
     
     # Логируем информацию о сообщениях
     for i, msg in enumerate(messages):
-        is_html = '<div' in msg.message or '<span' in msg.message or 'order-receipt' in msg.message
-        logger.info(f"Message {i+1}: sender={msg.sender}, length={len(msg.message)}, is_html={is_html}")
+        raw_message = msg.message or ''
+        is_html = '<div' in raw_message or '<span' in raw_message or 'order-receipt' in raw_message
+        logger.info(f"Message {i+1}: sender={msg.sender}, length={len(raw_message)}, is_html={is_html}, has_image={bool(getattr(msg, 'image_filename', None))}")
         if is_html:
-            logger.info(f"  HTML message preview: {msg.message[:200]}...")
+            logger.info(f"  HTML message preview: {raw_message[:200]}...")
+
+    try:
+        ChatMessage.query.filter_by(user_id=user.id, sender='admin', is_read=False).update({'is_read': True})
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
     
-    return jsonify([{
-        'id': m.id,
-        'user_id': m.user_id,
-        'sender': m.sender,
-        'message': m.message,
-        'created_at': m.created_at.replace(microsecond=0).isoformat() + 'Z'
-    } for m in messages]), 200
+    return jsonify([serialize_chat_message(m, user.id) for m in messages]), 200
 
 @app.route('/api/user/chat', methods=['POST'])
 @token_required
@@ -417,32 +1548,48 @@ def post_user_chat():
         logger.info(f"User not found: {request.user_id}")
         return jsonify({'error': 'User not found'}), 404
 
-    data = request.json
-    text = data.get('message')
-    logger.info(f"Received message: {text[:100]}... (length: {len(text) if text else 0})")
-    
-    if not text or not text.strip():
-        logger.info("Message is empty or None")
-        return jsonify({'error': 'Message is required'}), 400
+    text, image_file = get_chat_submission_payload()
+    logger.info(
+        "Received chat payload: text_length=%s has_image=%s filename=%s",
+        len(text),
+        bool(image_file and image_file.filename),
+        image_file.filename if image_file else ''
+    )
 
-    # Проверяем, содержит ли сообщение HTML
+    if not text and not (image_file and image_file.filename):
+        logger.info("Message payload is empty")
+        return jsonify({'error': 'Message or image is required'}), 400
+
     is_html = '<div' in text or '<span' in text or 'order-receipt' in text
     logger.info(f"Message contains HTML: {is_html}")
 
-    chat_msg = ChatMessage(user_id=user.id, sender='user', message=text.strip(), is_read=False)
+    try:
+        image_filename = save_chat_image(image_file) if image_file and image_file.filename else None
+    except ValueError as error:
+        return jsonify({'error': str(error)}), 400
+
+    chat_msg = ChatMessage(
+        user_id=user.id,
+        sender='user',
+        message=text,
+        image_filename=image_filename,
+        is_read=False
+    )
     db.session.add(chat_msg)
 
     # Сохраняем также как контактное сообщение, чтобы админ мог увидеть исходящие запросы пользователей
-    contact_msg = ContactMessage(user_id=user.id, message=text.strip())
-    db.session.add(contact_msg)
+    if text:
+        contact_msg = ContactMessage(user_id=user.id, message=text)
+        db.session.add(contact_msg)
 
     try:
         db.session.commit()
         logger.info(f"Message saved successfully, chat_msg.id: {chat_msg.id}")
-        return jsonify({'message': 'Сообщение отправлено в чат и передано менеджеру'}), 201
+        return jsonify(serialize_chat_message(chat_msg, user.id)), 201
     except Exception as e:
         logger.error(f"Error saving message: {e}")
         db.session.rollback()
+        remove_uploaded_file(image_filename)
         return jsonify({'error': 'Failed to save message'}), 500
 
 @app.route('/api/admin/chat/<int:user_id>', methods=['GET'])
@@ -461,18 +1608,7 @@ def get_admin_chat_for_user(user_id):
             db.session.rollback()
 
         messages = ChatMessage.query.filter_by(user_id=target.id).order_by(ChatMessage.created_at).all()
-        result = []
-        for m in messages:
-            created = m.created_at or datetime.utcnow()
-            result.append({
-                'id': m.id,
-                'user_id': m.user_id,
-                'sender': m.sender,
-                'message': m.message,
-                'created_at': created.replace(microsecond=0).isoformat() + 'Z'
-            })
-
-        return jsonify(result), 200
+        return jsonify([serialize_chat_message(m, target.id) for m in messages]), 200
     except Exception as e:
         db.session.rollback()
         app.logger.error('Error in get_admin_chat_for_user: %s', e, exc_info=True)
@@ -487,7 +1623,8 @@ def get_admin_chat():
         'user_id': m.user_id,
         'username': m.user.username if m.user else None,
         'sender': m.sender,
-        'message': m.message,
+        'message': inject_tracking_into_order_message(m.message or '', m.user_id) if (m.message or '') else '',
+        'image_url': f'/uploads/{m.image_filename}' if getattr(m, 'image_filename', None) else None,
         'created_at': m.created_at.replace(microsecond=0).isoformat() + 'Z'
     } for m in messages]), 200
 
@@ -500,6 +1637,7 @@ def get_admin_users():
     for u in users:
         unread_count = 0
         last_unread_time = None
+        last_message_time = None
         try:
             last_unread = ChatMessage.query.filter_by(user_id=u.id, sender='user', is_read=False).order_by(ChatMessage.created_at.desc()).first()
             if last_unread:
@@ -509,6 +1647,10 @@ def get_admin_users():
             # в случае отсутствия колонки is_read или иной ошибки - игнорируем
             unread_count = 0
 
+        last_message = ChatMessage.query.filter_by(user_id=u.id).order_by(ChatMessage.created_at.desc()).first()
+        if last_message:
+            last_message_time = last_message.created_at.replace(microsecond=0).isoformat() + 'Z'
+
         data.append({
             'id': u.id,
             'username': u.username,
@@ -516,10 +1658,50 @@ def get_admin_users():
             'full_name': u.profile.full_name if getattr(u, 'profile', None) else None,
             'display_name': (u.profile.full_name.strip() if getattr(u, 'profile', None) and u.profile.full_name and u.profile.full_name.strip() else f'User #{u.id}'),
             'unread_count': unread_count,
-            'last_unread_time': last_unread_time
+            'last_unread_time': last_unread_time,
+            'last_message_time': last_message_time
         })
 
     return jsonify(data), 200
+
+
+@app.route('/api/chat/unread-summary', methods=['GET'])
+@token_required
+def get_chat_unread_summary():
+    user = User.query.get(request.user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    if user.is_admin:
+        try:
+            user_unread_count = ChatMessage.query.filter_by(sender='user', is_read=False).count()
+        except Exception:
+            user_unread_count = 0
+
+        try:
+            guest_unread_count = GuestChatMessage.query.filter_by(sender='guest', is_read=False).count()
+        except Exception:
+            guest_unread_count = 0
+
+        return jsonify({
+            'count': user_unread_count + guest_unread_count,
+            'user_unread_count': user_unread_count,
+            'guest_unread_count': guest_unread_count
+        }), 200
+
+    try:
+        admin_unread_count = ChatMessage.query.filter_by(
+            user_id=user.id,
+            sender='admin',
+            is_read=False
+        ).count()
+    except Exception:
+        admin_unread_count = 0
+
+    return jsonify({
+        'count': admin_unread_count,
+        'admin_unread_count': admin_unread_count
+    }), 200
 
 
 @app.route('/api/admin/chat/<int:user_id>', methods=['POST'])
@@ -529,16 +1711,31 @@ def post_admin_chat(user_id):
     if not target:
         return jsonify({'error': 'User not found'}), 404
 
-    data = request.json
-    text = data.get('message')
-    if not text or not text.strip():
-        return jsonify({'error': 'Message is required'}), 400
+    text, image_file = get_chat_submission_payload()
+    if not text and not (image_file and image_file.filename):
+        return jsonify({'error': 'Message or image is required'}), 400
 
-    chat_msg = ChatMessage(user_id=target.id, sender='admin', message=text.strip())
+    try:
+        image_filename = save_chat_image(image_file) if image_file and image_file.filename else None
+    except ValueError as error:
+        return jsonify({'error': str(error)}), 400
+
+    chat_msg = ChatMessage(
+        user_id=target.id,
+        sender='admin',
+        message=text,
+        image_filename=image_filename
+    )
     db.session.add(chat_msg)
-    db.session.commit()
 
-    return jsonify({'message': 'Ответ отправлен пользователю'}), 201
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        remove_uploaded_file(image_filename)
+        return jsonify({'error': 'Failed to save message'}), 500
+
+    return jsonify(serialize_chat_message(chat_msg, target.id)), 201
 
 @app.route('/api/user/chat/<int:message_id>', methods=['DELETE'])
 @token_required
@@ -554,8 +1751,10 @@ def delete_user_chat_message(message_id):
     if message.user_id != user.id or message.sender != 'user':
         return jsonify({'error': 'You can only delete your own messages'}), 403
 
+    image_filename = getattr(message, 'image_filename', None)
     db.session.delete(message)
     db.session.commit()
+    remove_uploaded_file(image_filename)
 
     return jsonify({'message': 'Message deleted'}), 200
 
@@ -576,6 +1775,10 @@ def update_user_chat_message(message_id):
     data = request.json
     new_text = data.get('message')
     if not new_text or not new_text.strip():
+        if getattr(message, 'image_filename', None):
+            message.message = ''
+            db.session.commit()
+            return jsonify({'message': 'Message updated'}), 200
         return jsonify({'error': 'Message is required'}), 400
 
     message.message = new_text.strip()
@@ -1001,6 +2204,98 @@ def delete_banner(id):
         return jsonify({'error': str(e)}), 400
 
 # ===== МАРШРУТЫ: ЗАГРУЖЕННЫЕ ФАЙЛЫ =====
+@app.route('/api/admin/backups', methods=['GET'])
+@admin_required
+def list_backups():
+    backups = []
+
+    for archive_path in Path(app.config['BACKUP_FOLDER']).glob('*.zip'):
+        if archive_path.is_file():
+            backups.append(build_backup_response(str(archive_path)))
+
+    backups.sort(key=lambda item: item['created_at'], reverse=True)
+    return jsonify(backups), 200
+
+
+@app.route('/api/admin/backups', methods=['POST'])
+@admin_required
+def create_backup():
+    try:
+        archive_path = create_backup_archive(source='manual', prefix='backup')
+        return jsonify(build_backup_response(archive_path)), 201
+    except ValueError as error:
+        return jsonify({'error': str(error)}), 400
+    except Exception as error:
+        logger.exception('Backup creation failed')
+        return jsonify({'error': f'Backup creation failed: {error}'}), 500
+
+
+@app.route('/api/admin/backups/<path:filename>/download', methods=['GET'])
+@admin_required
+def download_backup(filename):
+    safe_filename = secure_filename(filename)
+    if safe_filename != filename:
+        return jsonify({'error': 'Invalid backup filename'}), 400
+
+    backup_path = os.path.join(app.config['BACKUP_FOLDER'], safe_filename)
+    if not os.path.isfile(backup_path):
+        return jsonify({'error': 'Backup not found'}), 404
+
+    return send_from_directory(
+        app.config['BACKUP_FOLDER'],
+        safe_filename,
+        as_attachment=True,
+        download_name=safe_filename
+    )
+
+
+@app.route('/api/admin/backups/restore', methods=['POST'])
+@admin_required
+def restore_backup():
+    temp_archive_path = None
+
+    try:
+        if 'backup' in request.files:
+            uploaded_file = request.files['backup']
+            if not uploaded_file or not uploaded_file.filename:
+                return jsonify({'error': 'Backup file was not provided'}), 400
+            if not uploaded_file.filename.lower().endswith('.zip'):
+                return jsonify({'error': 'Backup file must be a ZIP archive'}), 400
+
+            temp_dir = tempfile.mkdtemp(prefix='uploaded-backup-')
+            temp_archive_path = os.path.join(temp_dir, secure_filename(uploaded_file.filename))
+            uploaded_file.save(temp_archive_path)
+            archive_path = temp_archive_path
+        else:
+            data = request.get_json(silent=True) or request.form or {}
+            filename = secure_filename(data.get('filename', ''))
+            if not filename:
+                return jsonify({'error': 'Backup filename is required'}), 400
+
+            archive_path = os.path.join(app.config['BACKUP_FOLDER'], filename)
+            if not os.path.isfile(archive_path):
+                return jsonify({'error': 'Backup not found'}), 404
+
+        manifest, restore_point_path = restore_backup_archive(archive_path)
+        return jsonify({
+            'message': 'Backup restored successfully',
+            'restored_manifest': manifest,
+            'restore_point': build_backup_response(restore_point_path)
+        }), 200
+    except ValueError as error:
+        return jsonify({'error': str(error)}), 400
+    except zipfile.BadZipFile:
+        return jsonify({'error': 'Backup archive is corrupted or invalid'}), 400
+    except Exception as error:
+        logger.exception('Backup restore failed')
+        return jsonify({'error': f'Backup restore failed: {error}'}), 500
+    finally:
+        if temp_archive_path:
+            temp_root = os.path.dirname(temp_archive_path)
+            if os.path.isdir(temp_root):
+                shutil.rmtree(temp_root, ignore_errors=True)
+
+
 @app.route('/uploads/<path:filename>')
 def download_file(filename):
     print('DOWNLOAD_FILE', filename)
@@ -1037,6 +2332,147 @@ def admin_dashboard():
 def chat_page():
     return send_from_directory('../frontend', 'chat.html')
 
+# ===== GOOGLE OAUTH МАРШРУТЫ =====
+@app.route('/test')
+def test_route():
+    return f"GOOGLE_CLIENT_ID: {GOOGLE_CLIENT_ID[:10]}..., SECRET exists: {bool(GOOGLE_CLIENT_SECRET)}"
+
+@app.route('/routes')
+def list_routes():
+    routes = []
+    for rule in app.url_map.iter_rules():
+        routes.append(f"{rule.rule} -> {rule.endpoint}")
+    return "<br>".join(routes)
+
+@app.route('/auth/google')
+def google_login():
+    """Инициировать OAuth вход через Google"""
+    try:
+        next_url = request.args.get('next', '/') or '/'
+        if not next_url.startswith('/'):
+            next_url = '/'
+        session['oauth_next'] = next_url
+
+        google = OAuth2Session(
+            GOOGLE_CLIENT_ID,
+            scope=['openid', 'email', 'profile'],
+            redirect_uri=GOOGLE_REDIRECT_URI
+        )
+        authorization_url, state = google.authorization_url(
+            'https://accounts.google.com/o/oauth2/auth',
+            access_type='offline',
+            prompt='consent'
+        )
+        session['oauth_state'] = state
+        return redirect(authorization_url)
+    except Exception as e:
+        logger.error(f'Google OAuth error: {e}')
+        return f"Error: {e}", 500
+
+@app.route('/auth/google/callback')
+def google_callback():
+    """Обработать callback от Google OAuth"""
+    print("GOOGLE CALLBACK CALLED")  # Отладка
+    print(f"Request args: {request.args}")  # Отладка
+    print(f"Request url: {request.url}")  # Отладка
+    
+    try:
+        app.logger.info("Google callback started")
+        
+        # Проверить, есть ли error в параметрах
+        if 'error' in request.args:
+            error = request.args.get('error')
+            print(f"Google OAuth error from Google: {error}")
+            return redirect('/?error=oauth_failed')
+        
+        # Проверить, есть ли code
+        if 'code' not in request.args:
+            print("No code parameter in callback")
+            return redirect('/?error=oauth_failed')
+        
+        google = OAuth2Session(
+            GOOGLE_CLIENT_ID,
+            state=session.get('oauth_state'),
+            redirect_uri=GOOGLE_REDIRECT_URI
+        )
+        
+        print(f"Session state: {session.get('oauth_state')}")  # Отладка
+        print(f"Request state: {request.args.get('state')}")  # Отладка
+        
+        # Получить токен
+        token = google.fetch_token(
+            'https://oauth2.googleapis.com/token',
+            client_secret=GOOGLE_CLIENT_SECRET,
+            authorization_response=request.url
+        )
+        
+        print(f"Token received: {token}")  # Отладка
+        
+        # Получить информацию о пользователе
+        google_request = google_requests.Request()
+        id_info = id_token.verify_oauth2_token(
+            token['id_token'],
+            google_request,
+            GOOGLE_CLIENT_ID
+        )
+        
+        print(f"ID info: {id_info}")  # Отладка
+        
+        email = id_info['email']
+        name = id_info.get('name', email.split('@')[0])
+        google_id = id_info['sub']
+
+        # Проверить, существует ли пользователь
+        user = find_user_by_email(email)
+
+        if not user:
+            # Создать нового пользователя
+            username = name.replace(' ', '_').lower()
+            # Убедиться, что username уникален
+            base_username = username
+            counter = 1
+            while User.query.filter_by(username=username).first():
+                username = f"{base_username}_{counter}"
+                counter += 1
+
+            user = User(
+                username=username,
+                email=email,
+                password_hash='',  # Пустой пароль для OAuth пользователей
+                is_admin=False
+            )
+            db.session.add(user)
+            db.session.commit()
+
+        # Создать JWT токен
+        token_payload = {
+            'user_id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'is_admin': user.is_admin,
+            'exp': datetime.utcnow() + timedelta(days=7)
+        }
+        auth_token = jwt.encode(token_payload, app.config['SECRET_KEY'], algorithm='HS256')
+
+        next_url = session.pop('oauth_next', '/') or '/'
+        if not next_url.startswith('/'):
+            next_url = '/'
+
+        url_parts = list(urlparse(next_url))
+        query = dict(parse_qsl(url_parts[4]))
+        query['token'] = auth_token
+        url_parts[4] = urlencode(query)
+        return redirect(urlunparse(url_parts))
+
+    except Exception as e:
+        import traceback
+        error_message = str(e)
+        traceback_text = traceback.format_exc()
+        print(f"GOOGLE CALLBACK ERROR: {error_message}")  # Отладка
+        print(f"Traceback: {traceback_text}")  # Отладка
+        logger.error(f'Google OAuth error: {error_message}')
+        return f"<h1>Google OAuth Error</h1><pre>{error_message}</pre><pre>{traceback_text}</pre>", 500
+
 @app.route('/<path:path>')
 def static_files(path):
     if path.startswith('uploads/'):
@@ -1056,10 +2492,17 @@ def ensure_chat_message_is_read_column():
     try:
         result = db.session.execute(text("PRAGMA table_info(chat_message)")).fetchall()
         columns = [row[1] for row in result]
+        chat_message_migration_changed = False
         if 'is_read' not in columns:
             db.session.execute(text("ALTER TABLE chat_message ADD COLUMN is_read BOOLEAN NOT NULL DEFAULT 0"))
-            db.session.commit()
+            chat_message_migration_changed = True
             app.logger.info('Добавлена колонка is_read для chat_message')
+        if 'image_filename' not in columns:
+            db.session.execute(text("ALTER TABLE chat_message ADD COLUMN image_filename TEXT"))
+            chat_message_migration_changed = True
+            app.logger.info('Добавлена колонка image_filename для chat_message')
+        if chat_message_migration_changed:
+            db.session.commit()
     except Exception as e:
         db.session.rollback()
         app.logger.warning('Не удалось применить миграцию chat_message.is_read: %s', e)
@@ -1085,7 +2528,123 @@ def ensure_chat_message_is_read_column():
         db.session.rollback()
         app.logger.warning('Не удалось применить миграцию product_image.is_main: %s', e)
 
+    # Миграция для заказа: order_number
+    try:
+        result = db.session.execute(text("PRAGMA table_info('order')")).fetchall()
+        columns = [row[1] for row in result]
+        if 'order_number' not in columns:
+            db.session.execute(text("ALTER TABLE 'order' ADD COLUMN order_number TEXT DEFAULT ''"))
+            db.session.commit()
+            app.logger.info('Добавлена колонка order_number для order')
+            orders = Order.query.filter((Order.order_number == '') | (Order.order_number == None)).all()
+            for order in orders:
+                order.order_number = generate_order_number('ORD')
+            db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.warning('Не удалось применить миграцию order.order_number: %s', e)
+
+    # Миграция для гостевого заказа: order_number
+    try:
+        result = db.session.execute(text("PRAGMA table_info(guest_order)")).fetchall()
+        columns = [row[1] for row in result]
+        if 'order_number' not in columns:
+            db.session.execute(text("ALTER TABLE guest_order ADD COLUMN order_number TEXT DEFAULT ''"))
+            db.session.commit()
+            app.logger.info('Добавлена колонка order_number для guest_order')
+            guest_orders = GuestOrder.query.filter((GuestOrder.order_number == '') | (GuestOrder.order_number == None)).all()
+            for guest_order in guest_orders:
+                guest_order.order_number = generate_order_number('GUEST')
+            db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.warning('Не удалось применить миграцию guest_order.order_number: %s', e)
+
+    # Миграция для заказов: tracking_number
+    try:
+        result = db.session.execute(text("PRAGMA table_info('order')")).fetchall()
+        columns = [row[1] for row in result]
+        if 'tracking_number' not in columns:
+            db.session.execute(text("ALTER TABLE 'order' ADD COLUMN tracking_number TEXT"))
+            db.session.commit()
+            app.logger.info('Добавлена колонка tracking_number для order')
+    except Exception as e:
+        db.session.rollback()
+        app.logger.warning('Не удалось применить миграцию order.tracking_number: %s', e)
+
+    try:
+        result = db.session.execute(text("PRAGMA table_info(guest_order)")).fetchall()
+        columns = [row[1] for row in result]
+        if 'tracking_number' not in columns:
+            db.session.execute(text("ALTER TABLE guest_order ADD COLUMN tracking_number TEXT"))
+            db.session.commit()
+            app.logger.info('Добавлена колонка tracking_number для guest_order')
+    except Exception as e:
+        db.session.rollback()
+        app.logger.warning('Не удалось применить миграцию guest_order.tracking_number: %s', e)
+
+    try:
+        result = db.session.execute(text("PRAGMA table_info('order')")).fetchall()
+        columns = [row[1] for row in result]
+        if 'prepayment_received' not in columns:
+            db.session.execute(text("ALTER TABLE 'order' ADD COLUMN prepayment_received BOOLEAN DEFAULT 0"))
+            db.session.commit()
+            app.logger.info('Добавлена колонка prepayment_received для order')
+        if 'prepayment_amount' not in columns:
+            db.session.execute(text("ALTER TABLE 'order' ADD COLUMN prepayment_amount REAL"))
+            db.session.commit()
+            app.logger.info('Добавлена колонка prepayment_amount для order')
+    except Exception as e:
+        db.session.rollback()
+        app.logger.warning('Не удалось применить миграцию предоплаты для order: %s', e)
+
+    try:
+        result = db.session.execute(text("PRAGMA table_info(guest_order)")).fetchall()
+        columns = [row[1] for row in result]
+        if 'prepayment_received' not in columns:
+            db.session.execute(text("ALTER TABLE guest_order ADD COLUMN prepayment_received BOOLEAN DEFAULT 0"))
+            db.session.commit()
+            app.logger.info('Добавлена колонка prepayment_received для guest_order')
+        if 'prepayment_amount' not in columns:
+            db.session.execute(text("ALTER TABLE guest_order ADD COLUMN prepayment_amount REAL"))
+            db.session.commit()
+            app.logger.info('Добавлена колонка prepayment_amount для guest_order')
+    except Exception as e:
+        db.session.rollback()
+        app.logger.warning('Не удалось применить миграцию предоплаты для guest_order: %s', e)
+
 # ===== МАРШРУТЫ: ЗАКАЗЫ =====
+with app.app_context():
+    try:
+        inspector = inspect(db.engine)
+        if not inspector.has_table('order') or not inspector.has_table('guest_order'):
+            raise RuntimeError('Order tables are not available yet')
+
+        legacy_statuses = tuple(status for status in LEGACY_ORDER_STATUS_MAP.keys() if status not in ALLOWED_ORDER_STATUSES)
+        orders = Order.query.filter(Order.status.in_(legacy_statuses)).all() if legacy_statuses else []
+        guest_orders = GuestOrder.query.filter(GuestOrder.status.in_(legacy_statuses)).all() if legacy_statuses else []
+        has_status_updates = False
+
+        for order in orders:
+            normalized_status = normalize_order_status(order.status)
+            if order.status != normalized_status:
+                order.status = normalized_status
+                has_status_updates = True
+
+        for guest_order in guest_orders:
+            normalized_status = normalize_order_status(guest_order.status)
+            if guest_order.status != normalized_status:
+                guest_order.status = normalized_status
+                has_status_updates = True
+
+        if has_status_updates:
+            db.session.commit()
+            app.logger.info('Updated legacy order statuses to display labels')
+    except Exception as e:
+        db.session.rollback()
+        if str(e) != 'Order tables are not available yet':
+            app.logger.warning('Failed to update legacy order statuses: %s', e)
+
 @app.route('/api/orders', methods=['POST'])
 @token_required
 def create_order():
@@ -1108,6 +2667,7 @@ def create_order():
         return jsonify({'error': 'Missing required fields'}), 400
     
     order = Order(
+        order_number=generate_order_number('ORD'),
         user_id=user.id,
         items_data=items_data,
         total_price=total_price,
@@ -1116,13 +2676,15 @@ def create_order():
         recipient_city=recipient_city,
         delivery_method=delivery_method,
         postal_branch_number=postal_branch_number,
-        payment_method=payment_method
+        payment_method=payment_method,
+        status=ORDER_STATUS_AWAITING_CONFIRMATION
     )
     db.session.add(order)
     db.session.commit()
     
     return jsonify({
         'id': order.id,
+        'order_number': order.order_number,
         'message': 'Order created successfully'
     }), 201
 
@@ -1137,6 +2699,7 @@ def get_user_orders():
     orders = Order.query.filter_by(user_id=user.id).order_by(Order.created_at.desc()).all()
     return jsonify([{
         'id': o.id,
+        'order_number': o.order_number,
         'items_data': o.items_data,
         'total_price': o.total_price,
         'recipient_phone': o.recipient_phone,
@@ -1145,8 +2708,11 @@ def get_user_orders():
         'delivery_method': o.delivery_method,
         'postal_branch_number': o.postal_branch_number,
         'payment_method': o.payment_method,
-        'status': o.status,
-        'created_at': o.created_at.isoformat()
+        'status': normalize_order_status(o.status),
+        'tracking_number': o.tracking_number,
+        'prepayment_received': bool(o.prepayment_received),
+        'prepayment_amount': o.prepayment_amount,
+        'created_at': serialize_utc_datetime(o.created_at)
     } for o in orders]), 200
 
 @app.route('/api/admin/orders', methods=['GET'])
@@ -1156,6 +2722,7 @@ def get_all_orders():
     orders = Order.query.order_by(Order.created_at.desc()).all()
     return jsonify([{
         'id': o.id,
+        'order_number': o.order_number,
         'user_id': o.user_id,
         'user_email': o.user.email if o.user else None,
         'items_data': o.items_data,
@@ -1165,9 +2732,73 @@ def get_all_orders():
         'recipient_city': o.recipient_city,
         'delivery_method': o.delivery_method,
         'payment_method': o.payment_method,
-        'status': o.status,
-        'created_at': o.created_at.isoformat()
+        'status': normalize_order_status(o.status),
+        'tracking_number': o.tracking_number,
+        'prepayment_received': bool(o.prepayment_received),
+        'prepayment_amount': o.prepayment_amount,
+        'created_at': serialize_utc_datetime(o.created_at)
     } for o in orders]), 200
+
+@app.route('/api/admin/orders/<int:order_id>/status', methods=['PUT'])
+@admin_required
+def update_admin_order_status(order_id):
+    order = Order.query.get_or_404(order_id)
+    data = request.json or {}
+    status = (data.get('status') or '').strip()
+    incoming_tracking_number = (data.get('tracking_number') or '').strip() or None
+    tracking_number = incoming_tracking_number or order.tracking_number
+    prepayment_received_supplied = 'prepayment_received' in data
+    prepayment_amount_supplied = 'prepayment_amount' in data
+
+    if status not in ALLOWED_ORDER_STATUSES:
+        return jsonify({'error': 'Invalid order status'}), 400
+
+    if status == DELIVERY_STATUS and not tracking_number:
+        return jsonify({'error': 'Tracking number is required for delivery status'}), 400
+
+    next_prepayment_received = bool(order.prepayment_received)
+    next_prepayment_amount = order.prepayment_amount
+
+    if prepayment_received_supplied or prepayment_amount_supplied:
+        if prepayment_received_supplied:
+            next_prepayment_received = normalize_bool(data.get('prepayment_received'))
+        if prepayment_amount_supplied:
+            next_prepayment_amount = normalize_money_value(data.get('prepayment_amount'))
+
+        if next_prepayment_received:
+            if next_prepayment_amount is None or next_prepayment_amount <= 0:
+                return jsonify({'error': 'Prepayment amount is required when prepayment is received'}), 400
+            if next_prepayment_amount > float(order.total_price or 0):
+                return jsonify({'error': 'Prepayment amount cannot exceed total price'}), 400
+        else:
+            next_prepayment_amount = None
+
+    previous_status = order.status
+    previous_tracking_number = order.tracking_number
+
+    order.status = status
+    order.tracking_number = tracking_number
+    if prepayment_received_supplied or prepayment_amount_supplied:
+        order.prepayment_received = next_prepayment_received
+        order.prepayment_amount = next_prepayment_amount if next_prepayment_received else None
+    if status == DELIVERY_STATUS and tracking_number and (
+        previous_status != DELIVERY_STATUS or previous_tracking_number != tracking_number
+    ):
+        db.session.add(ChatMessage(
+            user_id=order.user_id,
+            sender='admin',
+            message=f'Ваш № ТТН {tracking_number} до замовлення {order.order_number}. Дякуємо за покупку!'
+        ))
+    db.session.commit()
+
+    return jsonify({
+        'id': order.id,
+        'status': order.status,
+        'tracking_number': order.tracking_number,
+        'prepayment_received': bool(order.prepayment_received),
+        'prepayment_amount': order.prepayment_amount,
+        'message': 'Order status updated'
+    }), 200
 
 # ===== МАРШРУТЫ: ГОСТЕВЫЕ ЗАКАЗЫ =====
 @app.route('/api/guest/order', methods=['POST'])
@@ -1188,6 +2819,7 @@ def create_guest_order():
         return jsonify({'error': 'Missing required fields'}), 400
     
     guest_order = GuestOrder(
+        order_number=generate_order_number('GUEST'),
         guest_phone=guest_phone,
         guest_name=guest_name,
         guest_city=guest_city,
@@ -1195,7 +2827,8 @@ def create_guest_order():
         total_price=total_price,
         delivery_method=delivery_method,
         postal_branch_number=postal_branch_number,
-        payment_method=payment_method
+        payment_method=payment_method,
+        status=ORDER_STATUS_AWAITING_CONFIRMATION
     )
     db.session.add(guest_order)
     db.session.commit()
@@ -1205,13 +2838,14 @@ def create_guest_order():
         guest_identifier=guest_identifier,
         guest_phone=guest_phone,
         sender='admin',
-        message=f'Товари замовлені на номер {guest_phone}. Менеджер звʼяжеться з вами найменше трохи часу. Дякуємо за замовлення!'
+        message=f'Ваше замовлення {guest_order.order_number} прийнято. Менеджер звʼяжеться з вами найближчим часом. Дякуємо за замовлення!'
     )
     db.session.add(welcome_msg)
     db.session.commit()
     
     return jsonify({
         'id': guest_order.id,
+        'order_number': guest_order.order_number,
         'message': 'Guest order created successfully'
     }), 201
 
@@ -1222,6 +2856,7 @@ def get_guest_orders():
     orders = GuestOrder.query.order_by(GuestOrder.created_at.desc()).all()
     return jsonify([{
         'id': o.id,
+        'order_number': o.order_number,
         'guest_phone': o.guest_phone,
         'guest_name': o.guest_name,
         'guest_city': o.guest_city,
@@ -1230,9 +2865,62 @@ def get_guest_orders():
         'delivery_method': o.delivery_method,
         'postal_branch_number': o.postal_branch_number,
         'payment_method': o.payment_method,
-        'status': o.status,
-        'created_at': o.created_at.isoformat()
+        'status': normalize_order_status(o.status),
+        'tracking_number': o.tracking_number,
+        'prepayment_received': bool(o.prepayment_received),
+        'prepayment_amount': o.prepayment_amount,
+        'created_at': serialize_utc_datetime(o.created_at)
     } for o in orders]), 200
+
+@app.route('/api/admin/guest-orders/<int:order_id>/status', methods=['PUT'])
+@admin_required
+def update_admin_guest_order_status(order_id):
+    order = GuestOrder.query.get_or_404(order_id)
+    data = request.json or {}
+    status = (data.get('status') or '').strip()
+    incoming_tracking_number = (data.get('tracking_number') or '').strip() or None
+    tracking_number = incoming_tracking_number or order.tracking_number
+    prepayment_received_supplied = 'prepayment_received' in data
+    prepayment_amount_supplied = 'prepayment_amount' in data
+
+    if status not in ALLOWED_ORDER_STATUSES:
+        return jsonify({'error': 'Invalid order status'}), 400
+
+    if status == DELIVERY_STATUS and not tracking_number:
+        return jsonify({'error': 'Tracking number is required for delivery status'}), 400
+
+    next_prepayment_received = bool(order.prepayment_received)
+    next_prepayment_amount = order.prepayment_amount
+
+    if prepayment_received_supplied or prepayment_amount_supplied:
+        if prepayment_received_supplied:
+            next_prepayment_received = normalize_bool(data.get('prepayment_received'))
+        if prepayment_amount_supplied:
+            next_prepayment_amount = normalize_money_value(data.get('prepayment_amount'))
+
+        if next_prepayment_received:
+            if next_prepayment_amount is None or next_prepayment_amount <= 0:
+                return jsonify({'error': 'Prepayment amount is required when prepayment is received'}), 400
+            if next_prepayment_amount > float(order.total_price or 0):
+                return jsonify({'error': 'Prepayment amount cannot exceed total price'}), 400
+        else:
+            next_prepayment_amount = None
+
+    order.status = status
+    order.tracking_number = tracking_number
+    if prepayment_received_supplied or prepayment_amount_supplied:
+        order.prepayment_received = next_prepayment_received
+        order.prepayment_amount = next_prepayment_amount if next_prepayment_received else None
+    db.session.commit()
+
+    return jsonify({
+        'id': order.id,
+        'status': order.status,
+        'tracking_number': order.tracking_number,
+        'prepayment_received': bool(order.prepayment_received),
+        'prepayment_amount': order.prepayment_amount,
+        'message': 'Guest order status updated'
+    }), 200
 
 # ===== МАРШРУТЫ: ГОСТЕВОЙ ЧАТ =====
 @app.route('/api/guest/chat', methods=['GET'])
@@ -1258,7 +2946,7 @@ def get_guest_chat():
     return jsonify([{
         'id': m.id,
         'sender': m.sender,
-        'message': m.message,
+        'message': inject_guest_order_fields_into_message(m.message),
         'created_at': m.created_at.replace(microsecond=0).isoformat() + 'Z'
     } for m in messages]), 200
 
@@ -1307,7 +2995,7 @@ def get_admin_guest_chat():
         'guest_identifier': m.guest_identifier,
         'guest_phone': m.guest_phone,
         'sender': m.sender,
-        'message': m.message,
+        'message': inject_guest_order_fields_into_message(m.message),
         'created_at': m.created_at.replace(microsecond=0).isoformat() + 'Z'
     } for m in messages]), 200
 
@@ -1347,6 +3035,7 @@ def get_guest_chat_users():
         if msg.guest_identifier not in guests_dict:
             unread_count = 0
             last_unread_time = None
+            last_message_time = None
             try:
                 last_unread = GuestChatMessage.query.filter_by(
                     guest_identifier=msg.guest_identifier,
@@ -1362,11 +3051,18 @@ def get_guest_chat_users():
                     last_unread_time = last_unread.created_at.replace(microsecond=0).isoformat() + 'Z'
             except Exception:
                 pass
+            last_message = GuestChatMessage.query.filter_by(
+                guest_identifier=msg.guest_identifier
+            ).order_by(GuestChatMessage.created_at.desc()).first()
+            if last_message:
+                last_message_time = last_message.created_at.replace(microsecond=0).isoformat() + 'Z'
+
             guests_dict[msg.guest_identifier] = {
                 'guest_identifier': msg.guest_identifier,
                 'guest_phone': msg.guest_phone,
                 'unread_count': unread_count,
-                'last_unread_time': last_unread_time
+                'last_unread_time': last_unread_time,
+                'last_message_time': last_message_time
             }
     
     return jsonify(list(guests_dict.values())), 200
@@ -1428,8 +3124,14 @@ if __name__ == '__main__':
         try:
             pragma_res = db.session.execute(text("PRAGMA table_info(chat_message)")).fetchall()
             column_names = [row[1] for row in pragma_res]
+            chat_message_columns_changed = False
             if 'is_read' not in column_names:
                 db.session.execute(text("ALTER TABLE chat_message ADD COLUMN is_read BOOLEAN NOT NULL DEFAULT 0"))
+                chat_message_columns_changed = True
+            if 'image_filename' not in column_names:
+                db.session.execute(text("ALTER TABLE chat_message ADD COLUMN image_filename TEXT"))
+                chat_message_columns_changed = True
+            if chat_message_columns_changed:
                 db.session.commit()
         except Exception as e:
             # Если что-то идет не так, продолжаем, т.к. таблица может не поддерживать изменение либо у неё уже есть колонка
@@ -1455,16 +3157,7 @@ if __name__ == '__main__':
             print('PRAGMA/ALTER TABLE banner error:', e)
             db.session.rollback()
 
-        # Создать админа по умолчанию, если нет пользователей
-        if not User.query.filter_by(is_admin=True).first():
-            admin = User(
-                username='admin',
-                email='admin@example.com',
-                password_hash=generate_password_hash('admin123'),
-                is_admin=True
-            )
-            db.session.add(admin)
-            db.session.commit()
-            print("Админ создан: admin@example.com / admin123")
+        ensure_admin_user_from_env()
+        restore_bundled_backup_if_database_empty()
     
     app.run(debug=True, port=8080)

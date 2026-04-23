@@ -9,7 +9,7 @@
 <body>
     <header>
         <div class="header-top">
-            <h1>SHILETTO SHOP</h1>
+            <h1><a href="/">SHILETTO SHOP</a></h1>
             <nav>
                 <div class="catalog-dropdown">
                     <button type="button" id="catalogBtn" class="nav-link">Каталог</button>
@@ -20,6 +20,15 @@
                 <button type="button" id="aboutBtn" class="nav-link">Про нас</button>
                 <button type="button" id="contactBtn" class="nav-link active">Контакти</button>
             </nav>
+            <div class="header-social">
+                <a class="header-social-link" href="https://www.instagram.com/shiletto.shop" target="_blank" rel="noopener noreferrer" aria-label="Instagram SHILETTO SHOP" title="Instagram SHILETTO SHOP">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                        <rect x="3.5" y="3.5" width="17" height="17" rx="5" stroke="currentColor" stroke-width="1.8"/>
+                        <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.8"/>
+                        <circle cx="17.3" cy="6.7" r="1" fill="currentColor"/>
+                    </svg>
+                </a>
+            </div>
         </div>
     </header>
 
@@ -51,11 +60,43 @@
     <div class="bottom-panel" id="bottomPanel">
         <button id="homeBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 9.5L12 3l9 6.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Головна</button>
         <button id="chatBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H6l-4 4V5a1 1 0 0 1 1-1z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Чат</button>
-        <button id="cartBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 6H6.21L7.25 11.4C7.32 11.79 7.63 12.08 8.02 12.11H18" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 6L3 2H1" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/><circle cx="17" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/></svg>Кошик (<span id="cartCount">0</span>)</button>
-        <button id="profileBtn" style="display:none;"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20C4 16.6863 6.68629 14 10 14H14C17.3137 14 20 16.6863 20 20" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Профіль</button>
+        <button id="cartBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 6H6.21L7.25 11.4C7.32 11.79 7.63 12.08 8.02 12.11H18" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 6L3 2H1" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/><circle cx="17" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/></svg><span>Кошик (<span id="cartCount">0</span>)</span></button>
+        <button id="profileBtn" style="display:none;"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20C4 16.6863 6.68629 14 10 14H14C17.3137 14 20 16.6863 20 20" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Мій кабінет</button>
         <button id="loginBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20C4 16.6863 6.68629 14 10 14H14C17.3137 14 20 16.6863 20 20" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Вхід</button>
-        <button id="registerBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20C4 16.6863 6.68629 14 10 14H14C17.3137 14 20 16.6863 20 20" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 8V12" stroke="#333333" stroke-width="1.8" stroke-linecap="round"/><path d="M16 10H20" stroke="#333333" stroke-width="1.8" stroke-linecap="round"/></svg>Реєстрація</button>
         <button id="logoutBtn" style="display: none;"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 21H5C4.44772 21 4 20.5523 4 20V4C4 3.44772 4.44772 3 5 3H9" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 17L21 12L16 7" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12H9" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Вихід</button>
+    </div>
+
+    <!-- Модальні вікна -->
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="modalTitle">Вхід</h2>
+            <div class="oauth-buttons" id="oauthButtons">
+                <button id="googleLoginBtn" class="oauth-btn google-btn">
+                    <svg width="18" height="18" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                    </svg>
+                    Увійти через Google
+                </button>
+            </div>
+            <div class="divider" id="authDivider">
+                <span>або</span>
+            </div>
+            <form id="loginForm">
+                <input type="text" id="regUsername" name="regUsername" placeholder="Ім'я користувача" style="display: none;" minlength="3" maxlength="30">
+                <input type="email" id="loginEmail" placeholder="Електронна пошта" required>
+                <input type="password" id="loginPassword" placeholder="Пароль" required>
+                <input type="text" id="regVerificationCode" placeholder="Код з email" inputmode="numeric" maxlength="6" style="display: none;">
+                <p id="registerStatusText" class="auth-status-text" style="display: none;"></p>
+                <p id="resendCodeRow" class="auth-inline-links" style="display: none;"><a href="#" id="resendCodeLink" class="auth-inline-link">Надіслати код повторно</a></p>
+                <button type="submit" id="modalSubmitBtn">Вхід</button>
+            </form>
+            <p id="forgotPasswordRow" class="auth-links-row"><a href="#" id="forgotPasswordLink" class="auth-inline-link">Забули пароль?</a></p>
+            <p id="switchLink" class="auth-links-row">Ще не маєте акаунта? <a href="#" id="switchToRegister" class="auth-inline-link">Зареєструватися</a></p>
+        </div>
     </div>
 
     <script src="js/notifications.js"></script>

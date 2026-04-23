@@ -5,33 +5,312 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Профіль користувача</title>
     <link rel="stylesheet" href="css/style.css">
+    <style>
+        .profile-section {
+            margin-top: 2rem;
+            background: #fff;
+            border: 1px solid #ece7df;
+            border-radius: 18px;
+            padding: 1.25rem;
+            box-shadow: 0 10px 30px rgba(73, 54, 37, 0.06);
+        }
+
+        .orders-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .orders-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .order-list-item {
+            width: 100%;
+            border: 1px solid #e7dfd2;
+            border-radius: 16px;
+            background: #fffdf9;
+            padding: 0.95rem 1rem;
+            text-align: left;
+            cursor: pointer;
+            transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .order-list-item:hover,
+        .order-list-item.is-active {
+            border-color: #b18252;
+            transform: translateY(-1px);
+            box-shadow: 0 10px 24px rgba(177, 130, 82, 0.12);
+        }
+
+        .order-list-item.is-highlighted {
+            border-color: #e0a93a;
+            background: linear-gradient(180deg, #fff8e7 0%, #fffdf9 100%);
+            box-shadow: 0 0 0 3px rgba(224, 169, 58, 0.18), 0 12px 28px rgba(224, 169, 58, 0.14);
+            animation: order-highlight-pulse 1.8s ease-in-out 3;
+        }
+
+        .order-list-item.is-active.is-highlighted {
+            box-shadow: 0 0 0 3px rgba(224, 169, 58, 0.22), 0 14px 28px rgba(177, 130, 82, 0.16);
+        }
+
+        @keyframes order-highlight-pulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(224, 169, 58, 0.24), 0 12px 28px rgba(224, 169, 58, 0.14);
+            }
+
+            50% {
+                box-shadow: 0 0 0 8px rgba(224, 169, 58, 0.06), 0 16px 30px rgba(224, 169, 58, 0.18);
+            }
+        }
+
+        .order-list-top,
+        .order-list-meta,
+        .order-detail-grid,
+        .order-detail-row,
+        .order-item-row,
+        .order-status-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .order-list-top,
+        .order-status-row {
+            align-items: center;
+        }
+
+        .order-list-top {
+            align-items: flex-start;
+        }
+
+        .order-list-meta {
+            margin-top: 0.6rem;
+            color: #6e6254;
+            font-size: 0.92rem;
+        }
+
+        .order-status-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-start;
+            border-radius: 999px;
+            padding: 0.35rem 0.75rem;
+            font-size: 0.82rem;
+            font-weight: 600;
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            text-align: center;
+            line-height: 1.3;
+            width: min(100%, 14rem);
+            max-width: 100%;
+            flex-shrink: 1;
+        }
+
+        .order-status-badge.awaiting-confirmation {
+            background: #fff1cf;
+            color: #8a5a00;
+        }
+
+        .order-status-badge.accepted {
+            background: #dff4e4;
+            color: #1f6b3a;
+        }
+
+        .order-status-badge.in-delivery {
+            background: #dcecff;
+            color: #1e5da8;
+        }
+
+        .order-status-badge.received {
+            background: #def7f0;
+            color: #0f766e;
+        }
+
+        .order-status-badge.refused {
+            background: #ffe1de;
+            color: #a33128;
+        }
+
+        .orders-empty,
+        .order-placeholder {
+            border: 1px dashed #d8cfc2;
+            border-radius: 16px;
+            padding: 1rem;
+            color: #6e6254;
+            background: #fffdf9;
+        }
+
+        .order-detail-card {
+            border: 1px solid #ece7df;
+            border-radius: 18px;
+            background: linear-gradient(180deg, #fffdfa 0%, #ffffff 100%);
+            padding: 1.1rem;
+            min-height: 100%;
+        }
+
+        .order-detail-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+
+        .order-detail-head .order-status-badge {
+            max-width: 320px;
+        }
+
+        .order-detail-head h3 {
+            margin: 0 0 0.3rem;
+        }
+
+        .order-detail-subtitle {
+            margin: 0;
+            color: #6e6254;
+        }
+
+        .order-detail-grid {
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+
+        .order-detail-row {
+            flex: 1 1 220px;
+            flex-direction: column;
+            border: 1px solid #f0e9de;
+            border-radius: 14px;
+            padding: 0.85rem;
+            background: #fff;
+        }
+
+        .order-detail-label {
+            color: #7b6d5d;
+            font-size: 0.85rem;
+            margin-bottom: 0.35rem;
+        }
+
+        .order-items-box {
+            margin-top: 1rem;
+            border-top: 1px solid #f0e9de;
+            padding-top: 1rem;
+        }
+
+        .order-items-box h4 {
+            margin: 0 0 0.75rem;
+        }
+
+        .order-items-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.65rem;
+        }
+
+        .order-item-row {
+            align-items: center;
+            border: 1px solid #f2ebdf;
+            border-radius: 14px;
+            padding: 0.8rem 0.9rem;
+            background: #fff;
+        }
+
+        .order-item-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+
+        .order-item-meta small {
+            color: #7b6d5d;
+        }
+
+        .order-status-note {
+            margin-top: 1rem;
+            padding: 0.9rem 1rem;
+            border-radius: 14px;
+            background: #f6f1e9;
+            color: #5d5347;
+        }
+
+        @media (max-width: 860px) {
+            .orders-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .order-detail-head,
+            .order-list-top,
+            .order-list-meta,
+            .order-item-row,
+            .order-status-row {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .order-status-badge,
+            .order-detail-head .order-status-badge {
+                max-width: 100%;
+            }
+        }
+    </style>
 </head>
 <body>
     <header>
-        <h1>Мій профіль</h1>
-        <nav>
-            <button id="logoutBtn">Вихід</button>
-        </nav>
+        <div class="header-top">
+            <h1><a href="/profile.html">Мій кабінет</a></h1>
+            <nav>
+                <div class="catalog-dropdown">
+                    <button type="button" id="catalogBtn" class="nav-link">Каталог</button>
+                    <div id="catalogMenu" class="catalog-menu">
+                        <div id="catalogMenuContent" class="catalog-menu-content"></div>
+                    </div>
+                </div>
+                <button type="button" id="aboutBtn" class="nav-link">Про нас</button>
+                <button type="button" id="contactBtn" class="nav-link">Контакти</button>
+            </nav>
+            <div class="header-social">
+                <a class="header-social-link" href="https://www.instagram.com/shiletto.shop" target="_blank" rel="noopener noreferrer" aria-label="Instagram SHILETTO SHOP" title="Instagram SHILETTO SHOP">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                        <rect x="3.5" y="3.5" width="17" height="17" rx="5" stroke="currentColor" stroke-width="1.8"/>
+                        <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.8"/>
+                        <circle cx="17.3" cy="6.7" r="1" fill="currentColor"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
     </header>
 
     <main class="main-content" style="padding: 1rem; max-width: 900px; margin: auto;">
         <section>
-            <h2>Персональні дані</h2>
+            <h2>Особисті дані</h2>
             <form id="profileForm">
-                <input type="text" id="fullName" placeholder="ПІБ" required>
-                <input type="tel" id="phone" placeholder="Телефон" required>
-                <input type="text" id="address" placeholder="Адреса доставки" required>
+                <input type="text" id="fullName" placeholder="ПІБ">
+                <input type="tel" id="phone" placeholder="Телефон">
+                <input type="text" id="address" placeholder="Населений пункт">
                 <button type="submit" class="cart-action-btn">Зберегти дані</button>
             </form>
             <p id="profileStatus" style="margin-top: 0.75rem; color: green;"></p>
         </section>
 
-        <section style="margin-top: 2rem;">
-            <h2>Зв'язатися з менеджером</h2>
-            <div>
-                <textarea id="contactMessage" placeholder="Опишіть ваш запит або уточнення по замовленню" rows="4" required></textarea>
-                <button id="sendContactBtn" class="cart-action-btn" style="margin-top: 0.5rem;">Надіслати менеджеру</button>
-                <p id="contactStatus" style="margin-top: 0.5rem; color: green;"></p>
+        <section class="profile-section">
+            <div class="order-status-row">
+                <div>
+                    <h2 style="margin: 0;">Ваші замовлення</h2>
+                    <p style="margin: 0.35rem 0 0; color: #6e6254;">Тут ви можете переглянути всі свої замовлення та відкрити деталі кожного з них.</p>
+                </div>
+            </div>
+
+            <div class="orders-layout">
+                <div id="ordersList" class="orders-list">
+                    <div class="orders-empty">Завантаження замовлень...</div>
+                </div>
+
+                <div id="orderDetails" class="order-placeholder">
+                    Оберіть замовлення зі списку, щоб переглянути його товари, доставку, оплату та поточний статус.
+                </div>
             </div>
         </section>
     </main>
@@ -39,28 +318,9 @@
     <div class="bottom-panel" id="bottomPanel">
         <button id="homeBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 9.5L12 3l9 6.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Головна</button>
         <button id="chatBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H6l-4 4V5a1 1 0 0 1 1-1z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Чат</button>
-        <button id="cartBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 6H6.21L7.25 11.4C7.32 11.79 7.63 12.08 8.02 12.11H18" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 6L3 2H1" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/><circle cx="17" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/></svg>Кошик (<span id="cartCount">0</span>)</button>
-        <button id="profileBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20C4 16.6863 6.68629 14 10 14H14C17.3137 14 20 16.6863 20 20" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Профіль</button>
+        <button id="cartBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 6H6.21L7.25 11.4C7.32 11.79 7.63 12.08 8.02 12.11H18" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 6L3 2H1" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/><circle cx="17" cy="20" r="1.5" stroke="#333333" stroke-width="1.8"/></svg><span>Кошик (<span id="cartCount">0</span>)</span></button>
+        <button id="profileBtn"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20C4 16.6863 6.68629 14 10 14H14C17.3137 14 20 16.6863 20 20" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Мій кабінет</button>
         <button id="logoutBtnBottom"><svg class="bottom-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 21H5C4.44772 21 4 20.5523 4 20V4C4 3.44772 4.44772 3 5 3H9" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 17L21 12L16 7" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12H9" stroke="#333333" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Вихід</button>
-    </div>
-
-    <div id="chatModal" class="modal">
-        <div class="modal-content">
-            <div class="chat-modal-header" style="position: relative; margin-bottom: 0.75rem;">
-                <button id="backToUserListBtn" class="btn-secondary" style="display:none; position:absolute; left:12px; top:50%; transform: translateY(-50%); padding:0.3rem 0.6rem; font-size:0.9rem;">← Повернутися до списку</button>
-                <h2 id="chatModalTitle" style="margin:0; text-align:center;">Чат з менеджером</h2>
-                <span class="close" id="closeChatModal" style="position:absolute; right:12px; top:50%; transform: translateY(-50%); font-size:28px;">&times;</span>
-            </div>
-            <div class="chat-modal-body">
-                <div id="adminChatUserList" style="display: none; margin-bottom: 0.5rem; max-height: 180px; overflow-y: auto; border: 1px solid #ccc; padding: 0.5rem; border-radius: 6px;"></div>
-                <div id="adminChatStatus" style="display: none; margin-bottom: 0.5rem; font-weight: bold;"></div>
-                <div id="chatMessages" class="chat-messages"></div>
-                <div class="chat-input-container">
-                    <textarea id="chatInput" placeholder="Напишіть повідомлення..." rows="2"></textarea>
-                    <button id="sendChatBtn" class="cart-action-btn">Надіслати</button>
-                </div>
-            </div>
-        </div>
     </div>
 
     <div id="cartModal" class="modal">
@@ -69,7 +329,34 @@
             <h2>Ваш кошик</h2>
             <div id="cartItems"></div>
             <div id="cartSummary"></div>
-            <button id="checkoutBtn" class="cart-action-btn checkout-btn">Оформити замовлення</button>
+            <button id="checkoutBtn" class="cart-action-btn checkout-btn">
+                <span id="checkoutTotal">ГРН. 0.00</span>
+                <span class="checkout-divider"></span>
+                <span id="checkoutText">ОФОРМИТИ</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="chatModal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="closeChatModal">&times;</span>
+            <h2>Чат з менеджером</h2>
+            <div class="chat-modal-body">
+                <div id="chatMessages" class="chat-messages"></div>
+                <div class="chat-input-container">
+                    <input id="chatImageInput" class="chat-image-input" type="file" accept="image/*" hidden>
+                    <div id="chatImagePreview" class="chat-image-preview"></div>
+                    <div class="chat-composer-row">
+                        <button id="chatAttachBtn" class="chat-attach-btn" type="button" aria-label="Прикріпити фото" title="Прикріпити фото">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                <path d="M21.44 11.05L12.25 20.24C10.1 22.39 6.61 22.39 4.46 20.24C2.31 18.09 2.31 14.6 4.46 12.45L13.3 3.61C14.73 2.18 17.05 2.18 18.48 3.61C19.91 5.04 19.91 7.36 18.48 8.79L10.34 16.93C9.38 17.89 7.82 17.89 6.86 16.93C5.9 15.97 5.9 14.41 6.86 13.45L14.29 6.02" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                        <textarea id="chatInput" placeholder="Напишіть повідомлення..." rows="2"></textarea>
+                        <button id="sendChatBtn" class="cart-action-btn">Надіслати</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 

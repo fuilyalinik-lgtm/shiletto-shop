@@ -20,6 +20,37 @@
             margin-bottom: 2rem;
         }
 
+        .checkout-back-row {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 0.75rem;
+        }
+
+        .checkout-back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            border: none;
+            background: transparent;
+            color: #64748b;
+            border-radius: 0;
+            padding: 0.15rem 0;
+            font-size: 0.82rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: color 0.2s ease, opacity 0.2s ease;
+            box-shadow: none;
+            opacity: 0.82;
+        }
+
+        .checkout-back-btn:hover {
+            background: transparent;
+            color: #334155;
+            transform: none;
+            box-shadow: none;
+            opacity: 1;
+        }
+
         .checkout-header h1 {
             font-size: 2rem;
             margin-bottom: 0.5rem;
@@ -37,6 +68,10 @@
             padding: 1.5rem;
             border-radius: 8px;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .checkout-section + .checkout-section {
+            margin-top: 1rem;
         }
 
         .checkout-section h2 {
@@ -62,24 +97,250 @@
         .form-group select,
         .form-group textarea {
             width: 100%;
-            padding: 0.75rem;
-            border: 1px solid #ddd;
-            border-radius: 6px;
+            padding: 0.85rem 1rem;
+            border: 1px solid #dbe4f0;
+            border-radius: 10px;
             font-size: 1rem;
             font-family: inherit;
+            line-height: 1.35;
+            color: #334155;
+            background: #f8fafc;
+            transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+            box-sizing: border-box;
+            appearance: none;
+            -webkit-appearance: none;
         }
 
         .form-group input:focus,
         .form-group select:focus,
         .form-group textarea:focus {
             outline: none;
-            border-color: #007bff;
-            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+            border-color: #93c5fd;
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.08);
+            color: #0f172a;
+        }
+
+        .form-group input::placeholder,
+        .form-group textarea::placeholder {
+            color: #94a3b8;
+        }
+
+        .form-group select {
+            cursor: pointer;
+            padding-right: 2.9rem;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5.25 7.5L10 12.5L14.75 7.5' stroke='%2364748b' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.9rem center;
+            background-size: 1rem;
+        }
+
+        .form-group select:hover,
+        .form-group input:hover,
+        .form-group textarea:hover {
+            border-color: #cbd5e1;
+            background-color: #fff;
         }
 
         .form-group textarea {
             resize: vertical;
-            min-height: 80px;
+            min-height: 110px;
+        }
+
+        .city-combobox {
+            position: relative;
+        }
+
+        .picker-combobox {
+            position: relative;
+        }
+
+        .native-combobox-select {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .picker-combobox-trigger {
+            width: 100%;
+            min-height: 53px;
+            padding: 0.85rem 2.9rem 0.85rem 1rem;
+            border: 1px solid #dbe4f0;
+            border-radius: 10px;
+            background: #f8fafc;
+            color: #334155;
+            font: inherit;
+            line-height: 1.35;
+            text-align: left;
+            cursor: pointer;
+            transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+        }
+
+        .picker-combobox-trigger:hover {
+            border-color: #cbd5e1;
+            background: #fff;
+        }
+
+        .picker-combobox.open .picker-combobox-trigger,
+        .picker-combobox-trigger:focus-visible {
+            outline: none;
+            border-color: #93c5fd;
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.08);
+            color: #0f172a;
+        }
+
+        .picker-combobox-value.is-placeholder {
+            color: #94a3b8;
+        }
+
+        .picker-combobox .city-combobox-toggle {
+            pointer-events: none;
+        }
+
+        .picker-combobox-menu {
+            position: absolute;
+            top: calc(100% + 0.5rem);
+            left: 0;
+            right: 0;
+            z-index: 30;
+            display: none;
+            padding: 0.85rem;
+            background: #fff;
+            border: 1px solid #dbe4f0;
+            border-radius: 10px;
+            box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
+        }
+
+        .picker-combobox.open .picker-combobox-menu {
+            display: block;
+        }
+
+        .picker-combobox-list {
+            display: grid;
+            gap: 0.5rem;
+        }
+
+        .picker-option {
+            border: 1px solid #dbe4f0;
+            border-radius: 8px;
+            background: #f8fafc;
+            color: #334155;
+            padding: 0.75rem 0.85rem;
+            text-align: left;
+            font: inherit;
+            line-height: 1.3;
+            cursor: pointer;
+            transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .picker-option:hover,
+        .picker-option:focus-visible,
+        .picker-option.is-active,
+        .picker-option.is-selected {
+            background: #eff6ff;
+            border-color: #93c5fd;
+            color: #0f172a;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.08);
+            outline: none;
+        }
+
+        .city-combobox-input-wrap {
+            position: relative;
+        }
+
+        .city-combobox-input {
+            padding-right: 2.9rem !important;
+        }
+
+        .city-combobox-toggle {
+            position: absolute;
+            top: 50%;
+            right: 0.75rem;
+            transform: translateY(-50%);
+            width: 1.25rem;
+            height: 1.25rem;
+            border: none;
+            background: transparent;
+            color: #64748b;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            transition: transform 0.2s ease, color 0.2s ease;
+        }
+
+        .city-combobox.open .city-combobox-toggle {
+            transform: translateY(-50%) rotate(180deg);
+            color: #007bff;
+        }
+
+        .city-combobox-menu {
+            position: absolute;
+            top: calc(100% + 0.5rem);
+            left: 0;
+            right: 0;
+            z-index: 30;
+            display: none;
+            padding: 0.85rem;
+            background: #fff;
+            border: 1px solid #dbe4f0;
+            border-radius: 10px;
+            box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
+        }
+
+        .city-combobox.open .city-combobox-menu {
+            display: block;
+        }
+
+        .city-combobox-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.5rem;
+            max-height: 260px;
+            overflow-y: auto;
+        }
+
+        .city-option {
+            border: 1px solid #dbe4f0;
+            border-radius: 8px;
+            background: #f8fafc;
+            color: #334155;
+            padding: 0.65rem 0.75rem;
+            text-align: left;
+            font: inherit;
+            line-height: 1.2;
+            cursor: pointer;
+            transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .city-option:hover,
+        .city-option:focus-visible,
+        .city-option.is-active {
+            background: #eff6ff;
+            border-color: #93c5fd;
+            color: #0f172a;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.08);
+            outline: none;
+        }
+
+        .city-combobox-empty {
+            display: none;
+            padding: 0.75rem;
+            border-radius: 8px;
+            background: #f8fafc;
+            color: #64748b;
+            font-size: 0.95rem;
+            text-align: center;
+        }
+
+        .city-combobox-empty.visible {
+            display: block;
+        }
+
+        #postalBranchNumber::placeholder {
+            font-size: 0.85rem;
         }
 
         .order-summary {
@@ -158,32 +419,43 @@
 
         .btn {
             flex: 1;
-            padding: 0.75rem 1.5rem;
+            padding: 0.4rem 0.75rem;
             border: none;
-            border-radius: 6px;
+            border-radius: 25px;
             font-size: 1rem;
-            font-weight: 600;
+            font-weight: bold;
             cursor: pointer;
-            transition: all 0.3s ease;
+            margin-left: 0.5rem;
+            transition: all 0.3s ease, background-position 0.5s ease;
+            opacity: 0.8;
         }
 
         .btn-primary {
-            background: #007bff;
+            background: linear-gradient(135deg, #4caf50 0%, #81c784 50%, #4caf50 100%);
+            background-size: 200% 200%;
             color: white;
+            transition: all 0.3s ease, background-position 0.5s ease;
         }
 
         .btn-primary:hover {
-            background: #0056b3;
+            background-position: right bottom;
             transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+            opacity: 1;
         }
 
         .btn-secondary {
-            background: #6c757d;
+            background: linear-gradient(135deg, #757575 0%, #9e9e9e 50%, #757575 100%);
+            background-size: 200% 200%;
             color: white;
+            transition: all 0.3s ease, background-position 0.5s ease;
         }
 
         .btn-secondary:hover {
-            background: #545b62;
+            background-position: right bottom;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(117, 117, 117, 0.4);
+            opacity: 1;
         }
 
         .error-message {
@@ -234,6 +506,10 @@
                 grid-template-columns: 1fr;
             }
 
+            .city-combobox-grid {
+                grid-template-columns: 1fr;
+            }
+
             .checkout-container {
                 padding: 1rem;
                 margin: 1rem;
@@ -269,15 +545,15 @@
 <body>
     <header>
         <div class="header-top">
-            <h1>SHILETTO SHOP</h1>
-            <nav>
-                <button type="button" id="backBtn" class="nav-link">← Назад до каталогу</button>
-            </nav>
+            <h1><a href="/">SHILETTO SHOP</a></h1>
         </div>
     </header>
 
     <main>
         <div class="checkout-container">
+            <div class="checkout-back-row">
+                <button type="button" id="backBtn" class="checkout-back-btn">← Назад до каталогу</button>
+            </div>
             <div class="checkout-header">
                 <h1>Оформлення замовлення</h1>
                 <p>Заповніть дані для завершення замовлення</p>
@@ -286,7 +562,7 @@
             <div id="errorMessage" class="error-message"></div>
             <div id="successMessage" class="success-message"></div>
             <div id="guestAuthNotice" class="guest-auth-notice">
-                <strong>ℹ️ Зверніть увагу:</strong> Ви оформляєте замовлення як незареєстрований користувач. Менеджер звʼяжеться з вами за номером телефону для підтвердження замовлення. Для відстеження Вашого замовлення необхідно <a href="#" id="registerLink" style="color:#007bff; text-decoration:none;">зареєструватися</a>.
+                <strong>ℹ️ Зверніть увагу:</strong> Ви оформляєте замовлення як незареєстрований користувач. Менеджер звʼяжеться з вами за номером телефону для підтвердження замовлення. Для відстеження Вашого замовлення необхідно <a href="#" id="registerLink" style="color:#007bff; text-decoration:none;">авторизуватися</a>.
             </div>
 
             <form id="checkoutForm">
@@ -308,56 +584,85 @@
                                     placeholder="Прізвіще Ім'я По батькові" required>
                             </div>
 
-                            <div class="form-group">
-                                <label for="recipientCity">Населений пункт *</label>
-                                <input type="text" id="recipientCity" name="recipientCity" 
-                                    placeholder="Виберіть або введіть місто" list="cityList" required>
-                                <datalist id="cityList">
-                                    <option value="Київ"></option>
-                                    <option value="Харків"></option>
-                                    <option value="Одеса"></option>
-                                    <option value="Дніпро"></option>
-                                    <option value="Львів"></option>
-                                    <option value="Запоріжжя"></option>
-                                    <option value="Кривий Ріг"></option>
-                                    <option value="Миколаїв"></option>
-                                    <option value="Вінниця"></option>
-                                    <option value="Херсон"></option>
-                                    <option value="Полтава"></option>
-                                    <option value="Чернігів"></option>
-                                    <option value="Черкаси"></option>
-                                    <option value="Суми"></option>
-                                    <option value="Житомир"></option>
-                                </datalist>
-                            </div>
                         </div>
 
                         <div class="checkout-section">
-                            <h2>Доставка</h2>
+                            <h2>Оплата і доставка</h2>
+                            
+                            <div class="form-group">
+                                <label for="recipientCity">Населений пункт *</label>
+                                <div class="city-combobox" id="recipientCityCombobox">
+                                    <div class="city-combobox-input-wrap">
+                                        <input type="text" id="recipientCity" name="recipientCity" class="city-combobox-input"
+                                            placeholder="Виберіть або введіть місто" autocomplete="off" required>
+                                        <span class="city-combobox-toggle" aria-hidden="true">
+                                            <svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor">
+                                                <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd"></path>
+                                            </svg>
+                                        </span>
+                                    </div>
+                                    <div class="city-combobox-menu" id="recipientCityMenu">
+                                        <div class="city-combobox-grid" id="recipientCityOptions"></div>
+                                        <div class="city-combobox-empty" id="recipientCityEmpty">Збережемо ваш власний варіант міста після вводу.</div>
+                                    </div>
+                                </div>
+                            </div>
                             
                             <div class="form-group">
                                 <label for="deliveryMethod">Спосіб отримання *</label>
-                                <select id="deliveryMethod" name="deliveryMethod" required>
-                                    <option value="">Виберіть спосіб</option>
-                                    <option value="postal">Самовивіз з поштових відділень</option>
-                                    <option value="courier">Кур'єр</option>
-                                </select>
+                                <div class="picker-combobox" id="deliveryMethodCombobox">
+                                    <select id="deliveryMethod" name="deliveryMethod" class="native-combobox-select" required>
+                                        <option value="">Виберіть спосіб</option>
+                                        <option value="nova_branch">Доставка у відділення Нової пошти</option>
+                                        <option value="nova_locker">Доставка у поштомат Нової пошти</option>
+                                        <option value="nova_courier">Доставка кур'єром Нової пошти</option>
+                                        <option value="other_post">Доставка іншою поштою</option>
+                                    </select>
+                                    <button type="button" class="picker-combobox-trigger" id="deliveryMethodTrigger" aria-haspopup="listbox" aria-expanded="false">
+                                        <span class="picker-combobox-value is-placeholder" id="deliveryMethodValue">Виберіть спосіб</span>
+                                        <span class="city-combobox-toggle" aria-hidden="true">
+                                            <svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor">
+                                                <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd"></path>
+                                            </svg>
+                                        </span>
+                                    </button>
+                                    <div class="picker-combobox-menu" id="deliveryMethodMenu">
+                                        <div class="picker-combobox-list" id="deliveryMethodOptions" role="listbox" aria-labelledby="deliveryMethod"></div>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="form-group conditional-field" id="postalFieldGroup">
-                                <label for="postalBranchNumber">Номер поштового відділення *</label>
+                                <label for="postalBranchNumber" id="postalBranchLabel">Номер поштового відділення *</label>
                                 <input type="text" id="postalBranchNumber" name="postalBranchNumber" 
-                                    placeholder="Наприклад: Відділення Нової пошти № 29">
+                                    placeholder="Наприклад: № 29">
                             </div>
 
                             <div class="form-group">
                                 <label for="paymentMethod">Спосіб оплати *</label>
-                                <select id="paymentMethod" name="paymentMethod" required>
-                                    <option value="">Виберіть спосіб</option>
-                                    <option value="cod">Накладений платіж (оплата при отриманні)</option>
-                                    <option value="card">Оплата карткою Visa або MasterCard</option>
-                                </select>
+                                <div class="picker-combobox" id="paymentMethodCombobox">
+                                    <select id="paymentMethod" name="paymentMethod" class="native-combobox-select" required>
+                                        <option value="">Виберіть спосіб</option>
+                                        <option value="cod">Накладений платіж (оплата при отриманні)</option>
+                                        <option value="card">Оплата карткою Visa або MasterCard</option>
+                                    </select>
+                                    <button type="button" class="picker-combobox-trigger" id="paymentMethodTrigger" aria-haspopup="listbox" aria-expanded="false">
+                                        <span class="picker-combobox-value is-placeholder" id="paymentMethodValue">Виберіть спосіб</span>
+                                        <span class="city-combobox-toggle" aria-hidden="true">
+                                            <svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor">
+                                                <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd"></path>
+                                            </svg>
+                                        </span>
+                                    </button>
+                                    <div class="picker-combobox-menu" id="paymentMethodMenu">
+                                        <div class="picker-combobox-list" id="paymentMethodOptions" role="listbox" aria-labelledby="paymentMethod"></div>
+                                    </div>
+                                </div>
                             </div>
+
+                            <p id="paymentDeliveryNote" style="margin: -0.25rem 0 1rem; font-size: 0.9rem; color: #666;">
+                                Доставка здійснюється за тарифами перевізника.
+                            </p>
 
                             <div class="form-group">
                                 <label for="notes">Коментар до замовлення</label>
@@ -375,43 +680,21 @@
                             <div id="orderReceiptContainer" class="order-receipt">
                                 <div class="order-receipt-header">Чек замовлення</div>
                                 <div id="orderReceiptItems"></div>
-                                <div class="order-receipt-total">
-                                    <span><strong>Загальна сума:</strong></span>
-                                    <strong><span id="orderReceiptTotal">0 грн</span></strong>
+                                <div class="order-receipt-total" id="orderReceiptTotal">
+                                    <span class="order-receipt-summary-row">
+                                        <span>Загальна сума:</span>
+                                        <strong>0 грн</strong>
+                                    </span>
+                                    <span class="order-receipt-summary-row">
+                                        <span>До сплати:</span>
+                                        <strong>0 грн</strong>
+                                    </span>
                                 </div>
                             </div>
 
-                            <div class="form-group" id="authGroup" style="display: none;">
-                                <label for="email">Email для входу *</label>
-                                <input type="email" id="email" name="email" 
-                                    placeholder="your@email.com">
-                                <small style="color: #666; margin-top: 0.25rem; display: block;">
-                                    Лишіть порожнім для оформлення як гість
-                                </small>
-                            </div>
-
-                            <div class="form-group" id="passwordGroup" style="display: none;">
-                                <label for="password">Пароль для входу *</label>
-                                <input type="password" id="password" name="password" 
-                                    placeholder="Мінімум 6 символів">
-                                <small style="color: #666; margin-top: 0.25rem; display: block;">
-                                    Лишіть порожнім для оформлення як гість
-                                </small>
-                            </div>
-
-                            <div class="form-group" id="usernameGroup" style="display: none;">
-                                <label for="username">Ім'я користувача *</label>
-                                <input type="text" id="username" name="username" 
-                                    placeholder="Ваше ім'я для входу">
-                                <small style="color: #666; margin-top: 0.25rem; display: block;">
-                                    Лишіть порожнім для оформлення як гість
-                                </small>
-                            </div>
-
-                            <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd;">
+                            <div id="checkoutAuthNotice" style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd;">
                                 <p style="font-size: 0.9rem; color: #666; margin-bottom: 1rem;">
-                                    <strong>Можна також:</strong><br>
-                                    <a href="/" style="color: #007bff; text-decoration: none;">Зареєструватися і оформити</a>
+                                    Для відстеження замовлення необхідно <a href="#" id="checkoutAuthLink" style="color: #007bff; text-decoration: none;">авторизуватися</a>.
                                 </p>
                             </div>
                         </div>
@@ -420,7 +703,7 @@
 
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" id="cancelBtn">Скасувати</button>
-                    <button type="submit" class="btn btn-primary" id="submitBtn">Завершити замовлення</button>
+                    <button type="submit" class="btn cart-action-btn checkout-btn" id="submitBtn">Підтвердити</button>
                 </div>
             </form>
         </div>
@@ -429,23 +712,36 @@
     <footer>
     </footer>
 
-    <div id="registerModal" class="modal">
+    <div id="loginModal" class="modal">
         <div class="modal-content">
-            <span class="close" id="closeRegisterModal">&times;</span>
-            <h2>Реєстрація</h2>
-            <form id="registerForm">
-                <div class="form-group">
-                    <input type="text" id="regUsername" placeholder="Ім'я користувача" required>
-                </div>
-                <div class="form-group">
-                    <input type="email" id="regEmail" placeholder="Електронна пошта" required>
-                </div>
-                <div class="form-group">
-                    <input type="password" id="regPassword" placeholder="Пароль" required>
-                </div>
-                <button type="submit" class="btn btn-primary">Зареєструватися</button>
+            <span class="close" id="closeLoginModal">&times;</span>
+            <h2 id="modalTitle">Вхід</h2>
+            <div class="oauth-buttons" id="oauthButtons">
+                <button id="googleLoginBtn" class="oauth-btn google-btn">
+                    <svg width="18" height="18" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                    </svg>
+                    Увійти через Google
+                </button>
+            </div>
+            <div class="divider" id="authDivider">
+                <span>або</span>
+            </div>
+            <form id="loginForm">
+                <input type="text" id="regUsername" name="regUsername" placeholder="Ім'я користувача" style="display: none;" minlength="3" maxlength="30">
+                <input type="email" id="loginEmail" placeholder="Електронна пошта" required>
+                <input type="password" id="loginPassword" placeholder="Пароль" required>
+                <input type="text" id="regVerificationCode" placeholder="Код з email" inputmode="numeric" maxlength="6" style="display: none;">
+                <p id="registerStatusText" class="auth-status-text" style="display: none;"></p>
+                <p id="resendCodeRow" class="auth-inline-links" style="display: none;"><a href="#" id="resendCodeLink" class="auth-inline-link">Надіслати код повторно</a></p>
+                <button type="submit" class="btn btn-primary" id="modalSubmitBtn">Вхід</button>
                 <p id="registerFeedback" style="color:#b00; margin-top:0.75rem; display:none;"></p>
             </form>
+            <p id="forgotPasswordRow" class="auth-links-row"><a href="#" id="forgotPasswordLink" class="auth-inline-link">Забули пароль?</a></p>
+            <p id="switchLink" class="auth-links-row">Ще не маєте акаунта? <a href="#" id="switchToRegister" class="auth-inline-link">Зареєструватися</a></p>
         </div>
     </div>
 
